@@ -113,77 +113,104 @@ export default function AdminDashboard() {
     }}>
       {/* Header */}
       <header style={{
-        backgroundColor: 'white',
-        borderBottom: `2px solid ${colors.gray100}`,
-        padding: '20px 40px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          maxWidth: '1400px',
-          margin: '0 auto'
+  backgroundColor: 'white',
+  borderBottom: `2px solid ${colors.gray100}`,
+  padding: '20px 40px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+  position: 'sticky',
+  top: 0,
+  zIndex: 10
+}}>
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    maxWidth: '1400px',
+    margin: '0 auto'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <img 
+        src="/logo-eduteam.png" 
+        alt="Eduteam" 
+        style={{ height: '42px' }} 
+      />
+      <div style={{
+        width: '2px',
+        height: '40px',
+        background: colors.gray200
+      }} />
+      <div>
+        <h1 style={{
+          fontSize: '24px',
+          fontWeight: 'bold',
+          background: gradients.primary,
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          margin: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <img 
-              src="/logo-eduteam.png" 
-              alt="Eduteam" 
-              style={{ height: '42px' }} 
-            />
-            <div style={{
-              width: '2px',
-              height: '40px',
-              background: colors.gray200
-            }} />
-            <div>
-              <h1 style={{
-                fontSize: '24px',
-                fontWeight: 'bold',
-                background: gradients.primary,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                margin: 0
-              }}>
-                Panel de Administración
-              </h1>
-              <p style={{ color: colors.gray500, margin: '2px 0 0 0', fontSize: '14px' }}>
-                ECOEMS - Gestión de Estudiantes
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '12px 24px',
-              border: `2px solid ${colors.gray200}`,
-              borderRadius: '12px',
-              backgroundColor: 'white',
-              cursor: 'pointer',
-              fontSize: '15px',
-              fontWeight: '600',
-              color: colors.gray700,
-              transition: 'all 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.borderColor = colors.primary
-              e.currentTarget.style.color = colors.primary
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.borderColor = colors.gray200
-              e.currentTarget.style.color = colors.gray700
-            }}
-          >
-            🚪 Cerrar Sesión
-          </button>
-        </div>
-      </header>
+          Panel de Administración
+        </h1>
+        <p style={{ color: colors.gray500, margin: '2px 0 0 0', fontSize: '14px' }}>
+          ECOEMS - Gestión de Estudiantes
+        </p>
+      </div>
+    </div>
+
+    {/* Botones */}
+    <div style={{ display: 'flex', gap: '12px' }}>
+      <button
+        onClick={() => navigate('/admin/questions')}
+        style={{
+          padding: '12px 24px',
+          background: gradients.primary,
+          color: 'white',
+          border: 'none',
+          borderRadius: '12px',
+          fontSize: '15px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)',
+          transition: 'all 0.2s'
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = '0 6px 16px rgba(232, 93, 154, 0.4)'
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(232, 93, 154, 0.3)'
+        }}
+      >
+        📚 Banco de Reactivos
+      </button>
+
+      <button
+        onClick={handleLogout}
+        style={{
+          padding: '12px 24px',
+          border: `2px solid ${colors.gray200}`,
+          borderRadius: '12px',
+          backgroundColor: 'white',
+          cursor: 'pointer',
+          fontSize: '15px',
+          fontWeight: '600',
+          color: colors.gray700,
+          transition: 'all 0.2s'
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.borderColor = colors.primary
+          e.currentTarget.style.color = colors.primary
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.borderColor = colors.gray200
+          e.currentTarget.style.color = colors.gray700
+        }}
+      >
+        🚪 Cerrar Sesión
+      </button>
+    </div>
+  </div>
+</header>
 
       {/* Content */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px 20px' }}>
