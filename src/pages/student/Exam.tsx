@@ -66,20 +66,25 @@ export default function Exam() {
 
   const loadQuestions = async () => {
     try {
+      // Intentar cargar desde DB
       const { data, error } = await supabase
         .from('question_bank')
         .select('*')
         .eq('status', 'approved')
         .eq('active', true)
+        .order('subject', { ascending: true })
         .limit(totalQuestions)
 
       if (error) throw error
 
-      if (!data || data.length < totalQuestions) {
+      // Si hay suficientes preguntas, usarlas; si no, generar mock
+      if (data && data.length >= totalQuestions) {
+        console.log(`Loaded ${data.length} questions from database`)
+        setQuestions(data)
+      } else {
+        console.log(`Only ${data?.length || 0} in DB, generating mock`)
         const mockQuestions = generateMockQuestions(totalQuestions)
         setQuestions(mockQuestions)
-      } else {
-        setQuestions(data)
       }
 
       setTimeLeft(totalMinutes * 60)
@@ -94,16 +99,26 @@ export default function Exam() {
   }
 
   const generateMockQuestions = (count: number): Question[] => {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `mock-${i}`,
-      subject: SUBJECTS[i % SUBJECTS.length],
-      question_text: `Pregunta ${i + 1} de demostración para ${SUBJECTS[i % SUBJECTS.length]}. ¿Cuál de las siguientes opciones es la correcta?`,
-      option_a: 'Opción A - Primera alternativa de respuesta',
-      option_b: 'Opción B - Segunda alternativa de respuesta',
-      option_c: 'Opción C - Tercera alternativa de respuesta',
-      option_d: 'Opción D - Cuarta alternativa de respuesta',
-      correct_option: ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
-    }))
+    const questionsPerSubject = Math.ceil(count / SUBJECTS.length)
+    const allQuestions: Question[] = []
+    
+    SUBJECTS.forEach((subject) => {
+      for (let i = 0; i < questionsPerSubject && allQuestions.length < count; i++) {
+        allQuestions.push({
+          id: `mock-${allQuestions.length + 1}`,
+          subject: subject,
+          question_text: `Pregunta ${allQuestions.length + 1} de ${subject}. ¿Cuál de las siguientes opciones es la correcta?`,
+          option_a: 'Opción A - Primera alternativa de respuesta',
+          option_b: 'Opción B - Segunda alternativa de respuesta',
+          option_c: 'Opción C - Tercera alternativa de respuesta',
+          option_d: 'Opción D - Cuarta alternativa de respuesta',
+          correct_option: ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
+        })
+      }
+    })
+    
+    console.log(`Generated ${allQuestions.length} mock questions`)
+    return allQuestions
   }
 
   const handleAnswer = (option: string) => {
@@ -317,7 +332,7 @@ export default function Exam() {
                 gap: '12px'
               }}>
                 <span>✓</span>
-                <span>Puedes navegar entre preguntas libremente</span>
+                <span>Las preguntas están agrupadas por materia</span>
               </li>
               <li style={{
                 fontSize: '15px',
@@ -327,7 +342,7 @@ export default function Exam() {
                 gap: '12px'
               }}>
                 <span>✓</span>
-                <span>El cronómetro iniciará al presionar "Comenzar"</span>
+                <span>Puedes navegar entre preguntas libremente</span>
               </li>
               <li style={{
                 fontSize: '15px',

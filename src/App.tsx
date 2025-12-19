@@ -6,8 +6,10 @@ import StudentDashboard from './pages/student/StudentDashboard'
 import Exam from './pages/student/Exam'
 import Results from './pages/student/Results'
 import AdminPanel from './pages/admin/AdminPanel';
-<h1 style={{ color: 'red' }}>DEPLOY TEST - EDUTEAM</h1>
-
+import Register from './pages/Register'
+import Purchase from './pages/Purchase'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 function App() {
   return (
@@ -21,6 +23,10 @@ function App() {
         <Route path="/exam/:type" element={<Exam />} />
         <Route path="/results" element={<Results />} />
         <Route path="/admin/panel" element={<AdminPanel />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/purchase" element={<Purchase />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
 
       </Routes>

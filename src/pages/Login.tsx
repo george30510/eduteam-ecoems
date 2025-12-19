@@ -251,6 +251,50 @@ export default function Login() {
               '🚀 Iniciar Sesión'
             )}
           </button>
+          <p style={{
+  textAlign: 'center',
+  fontSize: '15px',
+  color: colors.gray600,
+  margin: '20px 0 0 0'
+}}>
+  ¿No tienes cuenta?{' '}
+  <button
+    type="button"
+    onClick={() => navigate('/register')}
+    style={{
+      background: 'none',
+      border: 'none',
+      color: colors.primary,
+      fontWeight: '600',
+      cursor: 'pointer',
+      textDecoration: 'underline'
+    }}
+  >
+    Regístrate gratis
+  </button>
+</p>
+<p style={{
+  textAlign: 'center',
+  fontSize: '14px',
+  color: colors.gray600,
+  margin: '16px 0 0 0'
+}}>
+  <button
+    type="button"
+    onClick={() => navigate('/forgot-password')}
+    style={{
+      background: 'none',
+      border: 'none',
+      color: colors.primary,
+      fontWeight: '600',
+      cursor: 'pointer',
+      textDecoration: 'underline',
+      fontSize: '14px'
+    }}
+  >
+    ¿Olvidaste tu contraseña?
+  </button>
+</p>
         </form>
 
         <div style={{

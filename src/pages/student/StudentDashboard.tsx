@@ -611,41 +611,41 @@ export default function StudentDashboard() {
             </div>
 
             {/* Comprar más */}
-            {profile.exams_remaining === 0 && (
-              <div style={{
-                padding: '24px',
-                borderRadius: '12px',
-                background: colors.gray50,
-                border: `2px dashed ${colors.gray300}`,
-                textAlign: 'center',
-                marginTop: '20px'
-              }}>
-                <p style={{
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  color: colors.gray700,
-                  margin: '0 0 16px 0'
-                }}>
-                  ¿Necesitas más exámenes?
-                </p>
-                <button
-                  onClick={() => navigate('/purchase')}
-                  style={{
-                    padding: '14px 28px',
-                    background: gradients.primary,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontSize: '16px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
-                  }}
-                >
-                  🛒 Comprar Paquete de Exámenes
-                </button>
-              </div>
-            )}
+{profile.exams_remaining === 0 && (
+  <div style={{
+    padding: '24px',
+    borderRadius: '12px',
+    background: colors.gray50,
+    border: `2px dashed ${colors.gray300}`,
+    textAlign: 'center',
+    marginTop: '20px'
+  }}>
+    <p style={{
+      fontSize: '18px',
+      fontWeight: '600',
+      color: colors.gray700,
+      margin: '0 0 16px 0'
+    }}>
+      ¿Necesitas más exámenes?
+    </p>
+    <button
+      onClick={() => navigate('/purchase')}
+      style={{
+        padding: '14px 28px',
+        background: gradients.primary,
+        color: 'white',
+        border: 'none',
+        borderRadius: '12px',
+        fontSize: '16px',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
+      }}
+    >
+      🛒 Ver Paquetes
+    </button>
+  </div>
+)}
           </div>
         </div>
 
