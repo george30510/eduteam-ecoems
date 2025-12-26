@@ -10,6 +10,7 @@ import Register from './pages/Register'
 import Purchase from './pages/Purchase'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import StudentManagement from './pages/admin/StudentManagement'
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path="/purchase" element={<Purchase />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/admin/students" element={<StudentManagement />} />
 
 
       </Routes>

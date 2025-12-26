@@ -40,7 +40,7 @@ export default function Exam() {
   const [showOverview, setShowOverview] = useState(false)
 
   const isDiagnostic = type === 'diagnostic'
-  const totalQuestions = isDiagnostic ? 30 : 128
+  const totalQuestions = isDiagnostic ? 10 : 10
   const totalMinutes = isDiagnostic ? 30 : 180
 
   useEffect(() => {
@@ -141,64 +141,180 @@ export default function Exam() {
   }
 
   const handleFinish = async () => {
-    let correct = 0
-    questions.forEach((q, index) => {
-      if (answers[index] === q.correct_option) {
-        correct++
-      }
+  console.log('🏁 ===================================')
+  console.log('🏁 INICIANDO FINALIZACIÓN DE EXAMEN')
+  console.log('🏁 ===================================')
+  
+  let correct = 0
+  const answersArray: any[] = []
+
+  questions.forEach((q, index) => {
+    const studentAnswer = answers[index] ?? null
+    const isCorrect = studentAnswer === q.correct_option
+
+    if (isCorrect) correct++
+
+    answersArray.push({
+      question_id: q.id,
+      question_number: index + 1,
+      question_text: q.question_text,
+      subject: q.subject || 'Sin clasificar', // ✅ AGREGADO
+      student_answer: studentAnswer,
+      correct_answer: q.correct_option,
+      is_correct: isCorrect,
+      option_a: q.option_a,
+      option_b: q.option_b,
+      option_c: q.option_c,
+      option_d: q.option_d
     })
+  })
 
-    const percentage = Math.round((correct / questions.length) * 100)
+  const percentage = Math.round((correct / questions.length) * 100)
+  const timeTaken = (totalMinutes * 60) - timeLeft
+  const avgTimePerQuestion = Math.floor(timeTaken / questions.length)
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('generated_exams').insert({
-          user_id: user.id,
-          exam_type: type,
-          score: correct,
-          total_questions: questions.length,
-          percentage: percentage,
-          time_taken_seconds: (totalMinutes * 60) - timeLeft,
-          completed_at: new Date().toISOString(),
-          status: 'completed'
-        })
+  console.log('📊 Resultados:')
+  console.log('   ✓ Correctas:', correct)
+  console.log('   ✗ Incorrectas:', questions.length - correct - (questions.length - Object.keys(answers).length))
+  console.log('   ⊘ Sin responder:', questions.length - Object.keys(answers).length)
+  console.log('   % Porcentaje:', percentage)
+  console.log('   ⏱ Tiempo:', `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`)
 
-        if (type === 'complete') {
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('exams_remaining')
-            .eq('id', user.id)
-            .single()
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Usuario no autenticado')
 
-          if (profile) {
-            await supabase
-              .from('user_profiles')
-              .update({ exams_remaining: profile.exams_remaining - 1 })
-              .eq('id', user.id)
-          }
-        }
+    console.log('👤 Usuario ID:', user.id)
 
-        if (type === 'diagnostic') {
-          await supabase
-            .from('user_profiles')
-            .update({ free_diagnostic_used: true })
-            .eq('id', user.id)
-        }
-      }
-    } catch (error) {
-      console.error('Error saving results:', error)
+    // ✅ MAPEAR exam_type de inglés a español
+    const examTypeForDB = type === 'diagnostic' ? 'diagnostico' : 'completo'
+    
+    console.log('💾 Insertando examen...')
+    console.log('   Type URL:', type)
+    console.log('   Type DB:', examTypeForDB)
+
+    const { data: examData, error: examError } = await supabase
+      .from('generated_exams')
+      .insert({
+        user_id: user.id,
+        exam_type: examTypeForDB, // ✅ CORREGIDO: 'diagnostico' o 'completo'
+        exam_number: null,
+        questions_order: questions.map(q => q.id),
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        time_taken_seconds: timeTaken,
+        score: correct,
+        total_questions: questions.length,
+        percentage,
+        status: 'completed', // ✅ VÁLIDO según tu schema
+        questions_data: answersArray // ✅ Snapshot completo
+      })
+      .select()
+      .single()
+
+    if (examError) {
+      console.error('❌ Error insertando examen:')
+      console.error('   Código:', examError.code)
+      console.error('   Mensaje:', examError.message)
+      console.error('   Detalle:', examError.details)
+      console.error('   Hint:', examError.hint)
+      throw examError
     }
 
+    console.log('✅ Examen guardado, ID:', examData.id)
+
+    // ✅ Insertar respuestas individuales
+    console.log('💾 Insertando respuestas...')
+    
+    const answersToInsert = answersArray
+      .filter(a => !a.question_id.startsWith('mock-')) // Solo reales
+      .filter(a => a.student_answer !== null) // Solo respondidas
+      .map(a => ({
+        exam_id: examData.id,
+        student_id: user.id,
+        question_id: a.question_id,
+        question_number: a.question_number,
+        subject: a.subject, // ✅ AGREGADO
+        student_answer: a.student_answer,
+        correct_answer: a.correct_answer,
+        is_correct: a.is_correct,
+        time_spent_seconds: avgTimePerQuestion, // ✅ Promedio por ahora
+        answered_at: new Date().toISOString()
+      }))
+
+    console.log(`📝 Total a insertar: ${answersToInsert.length} respuestas`)
+    if (answersToInsert.length > 0) {
+      console.log('📝 Muestra primera:')
+      console.log(JSON.stringify(answersToInsert[0], null, 2))
+    }
+
+    if (answersToInsert.length > 0) {
+      const { error: answersError } = await supabase
+        .from('student_answers')
+        .insert(answersToInsert)
+
+      if (answersError) {
+        console.error('❌ Error insertando respuestas:', answersError)
+        console.warn('⚠️ Continuando (datos en questions_data)')
+      } else {
+        console.log('✅ Respuestas guardadas')
+      }
+    }
+
+    // ✅ Actualizar contadores
+    if (type === 'complete') {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('exams_remaining')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.exams_remaining > 0) {
+        await supabase
+          .from('user_profiles')
+          .update({ exams_remaining: profile.exams_remaining - 1 })
+          .eq('id', user.id)
+        console.log('✅ Contador actualizado')
+      }
+    }
+
+    if (type === 'diagnostic') {
+      await supabase
+        .from('user_profiles')
+        .update({ free_diagnostic_used: true })
+        .eq('id', user.id)
+      console.log('✅ Diagnóstico marcado')
+    }
+
+    console.log('🎉 EXAMEN COMPLETADO EXITOSAMENTE')
+    
     navigate('/results', {
       state: {
+        examId: examData.id,
         score: correct,
         total: questions.length,
         percentage,
         examType: type
       }
     })
+
+  } catch (error: any) {
+    console.error('💥 ERROR CRÍTICO:', error)
+    console.error('💥 Mensaje:', error?.message)
+    console.error('💥 Detalles:', error?.details)
+    console.error('💥 Hint:', error?.hint)
+    console.error('💥 Code:', error?.code)
+
+    alert(
+      'Error al guardar el examen:\n\n' +
+      `${error?.message}\n\n` +
+      'Revisa la consola (F12) para más detalles.'
+    )
+    
+    // NO navegar si falló
+    return
   }
+}
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)

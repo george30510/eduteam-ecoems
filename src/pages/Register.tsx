@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { colors, gradients } from '../styles/theme'
+import { gradients, colors } from '../styles/theme'
 
 export default function Register() {
   const navigate = useNavigate()
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
-  
+  const [success, setSuccess] = useState('')
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -22,425 +23,234 @@ export default function Register() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    
-    // Validaciones
+    setSuccess('')
+
     if (!formData.fullName || !formData.email || !formData.password) {
       setError('Por favor completa los campos obligatorios')
       return
     }
-    
+
     if (formData.password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres')
       return
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Las contraseñas no coinciden')
-      return
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      setError('Ingresa un email válido')
       return
     }
 
     setLoading(true)
 
     try {
-      // 1. Crear usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
-            full_name: formData.fullName
+            full_name: formData.fullName,
+            phone: formData.phone || null,
+            school: formData.school || null,
+            grade: formData.grade || null
           }
         }
       })
 
       if (authError) throw authError
-      if (!authData.user) throw new Error('No se pudo crear el usuario')
 
-      // 2. Crear perfil de usuario
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert([{
-          id: authData.user.id,
-          full_name: formData.fullName,
-          email: formData.email,
-          phone: formData.phone || null,
-          school: formData.school || null,
-          grade: formData.grade || null,
-          role: 'student',
-          exams_purchased: 0,
-          exams_remaining: 0,
-          free_diagnostic_used: false
-        }])
+      setSuccess(
+        'Registro exitoso 🎉 Revisa tu correo para confirmar tu cuenta y luego inicia sesión.'
+      )
 
-      if (profileError) throw profileError
+      setFormData({
+        fullName: '',
+        email: '',
+        phone: '',
+        school: '',
+        grade: '',
+        password: '',
+        confirmPassword: ''
+      })
 
-      setSuccess(true)
-      
-      // Esperar 2 segundos y redirigir
       setTimeout(() => {
-        navigate('/dashboard')
+        navigate('/')
       }, 2000)
 
     } catch (err: any) {
-      console.error('Error:', err)
-      if (err.message.includes('already registered')) {
-        setError('Este email ya está registrado. Intenta iniciar sesión.')
+      console.error(err)
+
+      if (err.message?.includes('already registered')) {
+        setError('Este correo ya está registrado. Intenta iniciar sesión.')
+      } else if (err.message?.includes('rate limit')) {
+        setError('Demasiados intentos. Intenta más tarde.')
       } else {
-        setError(err.message || 'Error al crear cuenta')
+        setError('No se pudo crear la cuenta. Intenta nuevamente.')
       }
     } finally {
       setLoading(false)
     }
   }
 
-  if (success) {
-    return (
-      <div style={{
+  return (
+    <div
+      style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #F0F4FF 0%, #F0FCFF 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        background: gradients.hero,
         padding: '20px'
-      }}>
-        <div style={{
-          background: 'white',
-          padding: '48px',
-          borderRadius: '24px',
-          maxWidth: '500px',
-          width: '100%',
-          textAlign: 'center',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
-        }}>
-          <div style={{
-            width: '80px',
-            height: '80px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '40px',
-            margin: '0 auto 24px',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
-          }}>
-            ✓
-          </div>
-          <h2 style={{
-            fontSize: '28px',
-            fontWeight: 'bold',
-            margin: '0 0 16px 0',
-            color: colors.gray900
-          }}>
-            ¡Cuenta Creada!
-          </h2>
-          <p style={{
-            fontSize: '16px',
-            color: colors.gray600,
-            margin: 0
-          }}>
-            Redirigiendo a tu dashboard...
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #F0F4FF 0%, #F0FCFF 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '40px 20px'
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '48px',
-        borderRadius: '24px',
-        maxWidth: '600px',
-        width: '100%',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
-      }}>
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <img 
-            src="/logo-eduteam.png" 
-            alt="Eduteam" 
-            style={{ height: '50px', marginBottom: '24px' }} 
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'white',
+          padding: '48px 40px',
+          borderRadius: '20px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          maxWidth: '440px',
+          width: '100%'
+        }}
+      >
+        {/* LOGO */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <img
+            src="/logo-eduteam.png"
+            alt="Eduteam"
+            style={{ height: '50px', marginBottom: '16px' }}
           />
-          <h1 style={{
-            fontSize: '32px',
-            fontWeight: 'bold',
-            background: gradients.primary,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            margin: '0 0 12px 0'
-          }}>
-            Crear Cuenta
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: 'bold',
+              color: colors.gray900,
+              marginBottom: '8px'
+            }}
+          >
+            Crear cuenta
           </h1>
-          <p style={{
-            fontSize: '16px',
-            color: colors.gray600,
-            margin: 0
-          }}>
+          <p style={{ fontSize: '15px', color: colors.gray600 }}>
             Comienza tu preparación para el ECOEMS
           </p>
         </div>
 
-        {/* Error */}
+        {/* ERROR */}
         {error && (
-          <div style={{
-            background: '#FEE2E2',
-            border: '2px solid #FCA5A5',
-            color: '#991B1B',
-            padding: '16px',
-            borderRadius: '12px',
-            marginBottom: '24px',
-            fontSize: '15px',
-            fontWeight: '600'
-          }}>
-            ⚠️ {error}
+          <div
+            style={{
+              backgroundColor: '#FEE2E2',
+              border: '1px solid #FCA5A5',
+              color: '#991B1B',
+              padding: '14px',
+              borderRadius: '12px',
+              marginBottom: '20px',
+              fontSize: '14px'
+            }}
+          >
+            {error}
           </div>
         )}
 
-        {/* Beneficio del diagnóstico gratis */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.08) 100%)',
-          border: '2px solid #10B981',
-          padding: '20px',
-          borderRadius: '16px',
-          marginBottom: '32px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '28px' }}>🎁</span>
-            <h3 style={{
-              fontSize: '18px',
-              fontWeight: '700',
-              color: colors.gray900,
-              margin: 0
-            }}>
-              ¡Examen Diagnóstico GRATIS!
-            </h3>
+        {/* SUCCESS */}
+        {success && (
+          <div
+            style={{
+              backgroundColor: '#ECFDF5',
+              border: '2px solid #10B981',
+              color: '#065F46',
+              padding: '14px',
+              borderRadius: '12px',
+              marginBottom: '20px',
+              fontSize: '15px',
+              fontWeight: 600
+            }}
+          >
+            {success}
           </div>
-          <p style={{
-            fontSize: '15px',
-            color: colors.gray700,
-            margin: 0
-          }}>
-            Al registrarte recibes un examen diagnóstico de 30 preguntas completamente gratis para evaluar tu nivel.
-          </p>
-        </div>
+        )}
 
-        {/* Form */}
+        {/* FORM */}
         <form onSubmit={handleRegister}>
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: '600',
-              color: colors.gray700,
-              fontSize: '14px'
-            }}>
-              Nombre Completo *
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.fullName}
-              onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-              placeholder="Ej: María González"
-              style={{
-                width: '100%',
-                padding: '14px',
-                border: `2px solid ${colors.gray200}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+          <input
+            type="text"
+            placeholder="Nombre completo"
+            value={formData.fullName}
+            onChange={(e) =>
+              setFormData({ ...formData, fullName: e.target.value })
+            }
+            required
+            style={inputStyle}
+          />
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: '600',
-              color: colors.gray700,
-              fontSize: '14px'
-            }}>
-              Email *
-            </label>
-            <input
-              type="email"
-              required
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="tu@email.com"
-              style={{
-                width: '100%',
-                padding: '14px',
-                border: `2px solid ${colors.gray200}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            value={formData.email}
+            onChange={(e) =>
+              setFormData({ ...formData, email: e.target.value })
+            }
+            required
+            style={inputStyle}
+          />
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            marginBottom: '20px'
-          }}>
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontWeight: '600',
-                color: colors.gray600,
-                fontSize: '14px'
-              }}>
-                Teléfono
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="5512345678"
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  border: `2px solid ${colors.gray200}`,
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
+          <input
+            type="tel"
+            placeholder="Teléfono (opcional)"
+            value={formData.phone}
+            onChange={(e) =>
+              setFormData({ ...formData, phone: e.target.value })
+            }
+            style={inputStyle}
+          />
 
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontWeight: '600',
-                color: colors.gray600,
-                fontSize: '14px'
-              }}>
-                Grado
-              </label>
-              <select
-                value={formData.grade}
-                onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  border: `2px solid ${colors.gray200}`,
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box'
-                }}
-              >
-                <option value="">Selecciona...</option>
-                <option value="3ro Secundaria">3ro Secundaria</option>
-                <option value="Preparatoria">Preparatoria</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-          </div>
+          <input
+            type="text"
+            placeholder="Escuela (opcional)"
+            value={formData.school}
+            onChange={(e) =>
+              setFormData({ ...formData, school: e.target.value })
+            }
+            style={inputStyle}
+          />
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: '600',
-              color: colors.gray600,
-              fontSize: '14px'
-            }}>
-              Escuela
-            </label>
-            <input
-              type="text"
-              value={formData.school}
-              onChange={(e) => setFormData({ ...formData, school: e.target.value })}
-              placeholder="Nombre de tu escuela"
-              style={{
-                width: '100%',
-                padding: '14px',
-                border: `2px solid ${colors.gray200}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+          <select
+            value={formData.grade}
+            onChange={(e) =>
+              setFormData({ ...formData, grade: e.target.value })
+            }
+            style={inputStyle}
+          >
+            <option value="">Selecciona tu grado</option>
+            <option value="3ro Secundaria">3ro Secundaria</option>
+            <option value="Preparatoria">Preparatoria</option>
+            <option value="Otro">Otro</option>
+          </select>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: '600',
-              color: colors.gray700,
-              fontSize: '14px'
-            }}>
-              Contraseña *
-            </label>
-            <input
-              type="password"
-              required
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              placeholder="Mínimo 6 caracteres"
-              style={{
-                width: '100%',
-                padding: '14px',
-                border: `2px solid ${colors.gray200}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={formData.password}
+            onChange={(e) =>
+              setFormData({ ...formData, password: e.target.value })
+            }
+            required
+            style={inputStyle}
+          />
 
-          <div style={{ marginBottom: '32px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: '600',
-              color: colors.gray700,
-              fontSize: '14px'
-            }}>
-              Confirmar Contraseña *
-            </label>
-            <input
-              type="password"
-              required
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              placeholder="Repite tu contraseña"
-              style={{
-                width: '100%',
-                padding: '14px',
-                border: `2px solid ${colors.gray200}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Confirmar contraseña"
+            value={formData.confirmPassword}
+            onChange={(e) =>
+              setFormData({ ...formData, confirmPassword: e.target.value })
+            }
+            required
+            style={{ ...inputStyle, marginBottom: '20px' }}
+          />
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !!success}
             style={{
               width: '100%',
               padding: '16px',
@@ -448,40 +258,48 @@ export default function Register() {
               color: 'white',
               border: 'none',
               borderRadius: '12px',
-              fontSize: '17px',
+              fontSize: '16px',
               fontWeight: '700',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              boxShadow: loading ? 'none' : '0 4px 12px rgba(232, 93, 154, 0.3)',
-              marginBottom: '20px'
+              cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? 'Creando cuenta...' : '🚀 Crear Cuenta'}
+            {loading ? 'Creando cuenta…' : '🚀 Crear cuenta'}
           </button>
+        </form>
 
-          <p style={{
+        <p
+          style={{
             textAlign: 'center',
             fontSize: '15px',
             color: colors.gray600,
-            margin: 0
-          }}>
-            ¿Ya tienes cuenta?{' '}
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: colors.primary,
-                fontWeight: '600',
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              Inicia sesión
-            </button>
-          </p>
-        </form>
+            marginTop: '20px'
+          }}
+        >
+          ¿Ya tienes cuenta?{' '}
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: colors.primary,
+              fontWeight: '600',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            Inicia sesión
+          </button>
+        </p>
       </div>
     </div>
   )
+}
+
+const inputStyle = {
+  width: '100%',
+  padding: '14px 16px',
+  borderRadius: '12px',
+  border: `2px solid ${colors.gray200}`,
+  fontSize: '16px',
+  marginBottom: '16px'
 }
