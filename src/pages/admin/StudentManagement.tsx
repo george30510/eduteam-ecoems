@@ -5,7 +5,7 @@ import { colors, gradients } from '../../styles/theme'
 
 interface Student {
   id: string
-  full_name: string | null  // ✅ Permitir null
+  full_name: string | null
   email: string
   phone: string | null
   school: string | null
@@ -16,79 +16,167 @@ interface Student {
   created_at: string
 }
 
+interface ExamHistory {
+  id: string
+  exams_granted: number
+  staff_id: string
+  payment_method: string
+  amount_paid: number
+  notes: string
+  created_at: string
+}
+
 export default function StudentManagement() {
   const navigate = useNavigate()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showEnableModal, setShowEnableModal] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // Modal exámenes (sumar/restar)
+  const [showExamModal, setShowExamModal] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [examQuantity, setExamQuantity] = useState(6)
 
+  // Modal crear estudiante
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [creatingStudent, setCreatingStudent] = useState(false)
+  const [newStudent, setNewStudent] = useState({
+    full_name: '',
+    email: '',
+    school: '',
+    grade: '',
+    phone: ''
+  })
+
+  // Modal credenciales
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [newStudentCredentials, setNewStudentCredentials] = useState<{
+    email: string
+    password: string
+    name: string
+  } | null>(null)
+
+  // Modal historial
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [examHistory, setExamHistory] = useState<ExamHistory[]>([])
+
   useEffect(() => {
     loadStudents()
+    checkUserRole()
   }, [])
 
   const loadStudents = async () => {
-  try {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('role', 'student')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setStudents(data || [])
+    } catch (error) {
+      console.error('Error loading students:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const checkUserRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
-      .eq('role', 'student')
-      .order('created_at', { ascending: false })
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-    if (error) throw error
-    setStudents(data || [])
-  } catch (error) {
-    console.error('Error loading students:', error)
-  } finally {
-    setLoading(false)
+    if (!error && data?.role === 'admin') {
+      setIsAdmin(true)
+    }
   }
-}
-  
 
-  const handleEnableExams = async () => {
+  const handleCreateStudent = async () => {
+    if (!newStudent.full_name || !newStudent.email) {
+      alert('Nombre y email son obligatorios')
+      return
+    }
+
+    try {
+      setCreatingStudent(true)
+
+      const { data, error } = await supabase.rpc('create_student_account', {
+        p_full_name: newStudent.full_name,
+        p_email: newStudent.email.toLowerCase(),
+        p_school: newStudent.school || null,
+        p_grade: newStudent.grade || null,
+        p_phone: newStudent.phone || null
+      })
+
+      if (error) {
+        console.error('Error RPC:', error)
+        throw new Error(error.message)
+      }
+
+      if (!data || !data.success) {
+        throw new Error(data?.error || 'Error al crear estudiante')
+      }
+
+      // Guardar credenciales y mostrar modal
+      setNewStudentCredentials({
+        email: data.student.email,
+        password: data.student.temp_password,
+        name: data.student.full_name
+      })
+      setShowCredentialsModal(true)
+      setShowCreateModal(false)
+      setNewStudent({ full_name: '', email: '', school: '', grade: '', phone: '' })
+      await loadStudents()
+
+    } catch (error: any) {
+      console.error('Error completo:', error)
+      alert(`❌ Error: ${error.message}`)
+    } finally {
+      setCreatingStudent(false)
+    }
+  }
+
+  const handleUpdateExams = async () => {
     if (!selectedStudent) return
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
-      console.log('Habilitando exámenes...')
-      console.log('Student:', selectedStudent.id)
-      console.log('Quantity:', examQuantity)
+      const newExamsRemaining = Math.max(0, selectedStudent.exams_remaining + examQuantity)
+      const newExamsPurchased = selectedStudent.exams_purchased + (examQuantity > 0 ? examQuantity : 0)
 
-      // Actualizar exámenes del estudiante
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
-          exams_remaining: selectedStudent.exams_remaining + examQuantity,
-          exams_purchased: selectedStudent.exams_purchased + examQuantity
+          exams_remaining: newExamsRemaining,
+          exams_purchased: newExamsPurchased
         })
         .eq('id', selectedStudent.id)
 
       if (updateError) throw updateError
 
-      // Registrar compra manual
-      const { error: purchaseError } = await supabase
+      await supabase
         .from('manual_purchases')
         .insert({
           student_id: selectedStudent.id,
           staff_id: user.id,
           exams_granted: examQuantity,
-          payment_method: 'efectivo',
-          amount_paid: examQuantity === 6 ? 150 : (examQuantity * 25),
-          notes: `Habilitados manualmente por admin/staff`
+          payment_method: examQuantity > 0 ? 'efectivo' : 'ajuste',
+          amount_paid: examQuantity > 0 ? (examQuantity === 6 ? 150 : examQuantity * 25) : 0,
+          notes: examQuantity > 0 ? 'Habilitados manualmente por admin/staff' : 'Ajuste administrativo'
         })
 
-      if (purchaseError) {
-        console.warn('Error registrando compra:', purchaseError)
-        // No lanzar error, lo importante es que se habilitaron los exámenes
-      }
-
-      alert(`✅ ${examQuantity} exámenes habilitados exitosamente`)
+      alert(`✅ Exámenes actualizados: ${examQuantity > 0 ? '+' : ''}${examQuantity}`)
       loadStudents()
-      setShowEnableModal(false)
+      setShowExamModal(false)
       setSelectedStudent(null)
       setExamQuantity(6)
     } catch (error: any) {
@@ -97,11 +185,67 @@ export default function StudentManagement() {
     }
   }
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✅ Copiado al portapapeles')
+    }).catch(() => {
+      alert('❌ No se pudo copiar. Copia manualmente.')
+    })
+  }
+
+  const handleResetDiagnostic = async (student: Student) => {
+    const confirmed = window.confirm(
+      `¿Estás seguro de que quieres habilitar el diagnóstico gratuito para ${student.full_name || student.email}?\n\n` +
+      `Esto permitirá al estudiante tomar un nuevo examen diagnóstico sin costo.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ free_diagnostic_used: false })
+        .eq('id', student.id)
+
+      if (error) throw error
+
+      alert(`✅ Diagnóstico gratuito habilitado para ${student.full_name || student.email}`)
+      
+      await loadStudents()
+      
+      if (showHistoryModal && selectedStudent?.id === student.id) {
+        const updatedStudent = { ...selectedStudent, free_diagnostic_used: false }
+        setSelectedStudent(updatedStudent)
+      }
+    } catch (error: any) {
+      console.error('Error resetting diagnostic:', error)
+      alert(`❌ Error al resetear el diagnóstico: ${error.message}`)
+    }
+  }
+
+  const handleViewHistory = async (student: Student) => {
+    try {
+      setSelectedStudent(student)
+      const { data, error } = await supabase
+        .from('manual_purchases')
+        .select('*')
+        .eq('student_id', student.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setExamHistory(data || [])
+      setShowHistoryModal(true)
+    } catch (error: any) {
+      console.error('Error:', error)
+      alert(`Error: ${error.message}`)
+    }
+  }
+
   const filteredStudents = students.filter(s =>
-  (s.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-  s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  (s.school?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-)
+    (s.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.school?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  )
 
   if (loading) {
     return (
@@ -158,21 +302,60 @@ export default function StudentManagement() {
             </p>
           </div>
 
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              padding: '14px 24px',
-              background: 'white',
-              color: colors.gray700,
-              border: `2px solid ${colors.gray200}`,
-              borderRadius: '12px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            ← Volver al Dashboard
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            {isAdmin && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  padding: '14px 24px',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                ➕ Crear Estudiante
+              </button>
+            )}
+
+            <button
+              onClick={() => navigate('/admin')}
+              style={{
+                padding: '14px 24px',
+                background: 'white',
+                color: colors.gray700,
+                border: `2px solid ${colors.gray200}`,
+                borderRadius: '12px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = colors.primary
+                e.currentTarget.style.color = colors.primary
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = colors.gray200
+                e.currentTarget.style.color = colors.gray700
+              }}
+            >
+              ← Volver al Dashboard
+            </button>
+          </div>
         </div>
 
         {/* Búsqueda */}
@@ -188,12 +371,21 @@ export default function StudentManagement() {
               border: `2px solid ${colors.gray200}`,
               borderRadius: '12px',
               fontSize: '15px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              transition: 'all 0.2s'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = colors.primary
+              e.currentTarget.style.boxShadow = `0 0 0 4px rgba(107, 141, 214, 0.1)`
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = colors.gray200
+              e.currentTarget.style.boxShadow = 'none'
             }}
           />
         </div>
 
-        {/* Stats rápidos */}
+        {/* Stats */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -204,7 +396,8 @@ export default function StudentManagement() {
             background: 'white',
             padding: '20px',
             borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            border: `1px solid ${colors.gray100}`
           }}>
             <div style={{ fontSize: '32px', fontWeight: 'bold', color: colors.primary }}>
               {students.length}
@@ -218,7 +411,8 @@ export default function StudentManagement() {
             background: 'white',
             padding: '20px',
             borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            border: `1px solid ${colors.gray100}`
           }}>
             <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#10B981' }}>
               {students.filter(s => s.exams_remaining > 0).length}
@@ -232,7 +426,8 @@ export default function StudentManagement() {
             background: 'white',
             padding: '20px',
             borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            border: `1px solid ${colors.gray100}`
           }}>
             <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#F59E0B' }}>
               {students.filter(s => !s.free_diagnostic_used).length}
@@ -248,7 +443,8 @@ export default function StudentManagement() {
           background: 'white',
           borderRadius: '16px',
           overflow: 'hidden',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+          boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+          border: `1px solid ${colors.gray100}`
         }}>
           {filteredStudents.length === 0 ? (
             <div style={{
@@ -310,17 +506,19 @@ export default function StudentManagement() {
                     }}>
                       Diagnóstico
                     </th>
-                    <th style={{
-                      padding: '16px',
-                      textAlign: 'center',
-                      fontWeight: '700',
-                      fontSize: '13px',
-                      color: colors.gray700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      Acciones
-                    </th>
+                    {isAdmin && (
+                      <th style={{
+                        padding: '16px',
+                        textAlign: 'center',
+                        fontWeight: '700',
+                        fontSize: '13px',
+                        color: colors.gray700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Acciones
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -344,7 +542,7 @@ export default function StudentManagement() {
                           color: colors.gray900,
                           marginBottom: '4px'
                         }}>
-                          {student.full_name || 'Sin nombre'}
+                          {student.full_name || student.email}
                         </div>
                         {student.school && (
                           <div style={{
@@ -411,36 +609,64 @@ export default function StudentManagement() {
                         </span>
                       </td>
 
-                      <td style={{ padding: '16px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => {
-                            setSelectedStudent(student)
-                            setShowEnableModal(true)
-                          }}
-                          style={{
-                            padding: '10px 20px',
-                            background: gradients.primary,
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(232, 93, 154, 0.3)',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseOver={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)'
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(232, 93, 154, 0.4)'
-                          }}
-                          onMouseOut={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)'
-                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(232, 93, 154, 0.3)'
-                          }}
-                        >
-                          💳 Habilitar Exámenes
-                        </button>
-                      </td>
+                      {isAdmin && (
+                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => {
+                                setSelectedStudent(student)
+                                setShowExamModal(true)
+                              }}
+                              style={{
+                                padding: '8px 16px',
+                                background: gradients.primary,
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(232, 93, 154, 0.3)',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-2px)'
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(232, 93, 154, 0.4)'
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)'
+                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(232, 93, 154, 0.3)'
+                              }}
+                            >
+                              💳 Exámenes
+                            </button>
+                            <button
+                              onClick={() => handleViewHistory(student)}
+                              style={{
+                                padding: '8px 16px',
+                                background: 'white',
+                                color: colors.gray700,
+                                border: `2px solid ${colors.gray200}`,
+                                borderRadius: '8px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.borderColor = colors.primary
+                                e.currentTarget.style.color = colors.primary
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.borderColor = colors.gray200
+                                e.currentTarget.style.color = colors.gray700
+                              }}
+                            >
+                              📜 Historial
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -449,8 +675,8 @@ export default function StudentManagement() {
           )}
         </div>
 
-        {/* Modal Habilitar Exámenes */}
-        {showEnableModal && selectedStudent && (
+        {/* Modal Crear Estudiante */}
+        {isAdmin && showCreateModal && (
           <div
             style={{
               position: 'fixed',
@@ -465,7 +691,224 @@ export default function StudentManagement() {
               zIndex: 1000,
               padding: '20px'
             }}
-            onClick={() => setShowEnableModal(false)}
+            onClick={() => setShowCreateModal(false)}
+          >
+            <div
+              style={{
+                background: 'white',
+                padding: '32px',
+                borderRadius: '20px',
+                maxWidth: '500px',
+                width: '100%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                marginBottom: '24px',
+                color: colors.gray900
+              }}>
+                ➕ Crear Nuevo Estudiante
+              </h3>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: colors.gray700
+                }}>
+                  Nombre completo *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Juan Pérez López"
+                  value={newStudent.full_name}
+                  onChange={(e) => setNewStudent({ ...newStudent, full_name: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: colors.gray700
+                }}>
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  placeholder="Ej: estudiante@email.com"
+                  value={newStudent.email}
+                  onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: colors.gray700
+                }}>
+                  Escuela
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Preparatoria 5"
+                  value={newStudent.school}
+                  onChange={(e) => setNewStudent({ ...newStudent, school: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  color: colors.gray700,
+                  fontWeight: '600',
+                  fontSize: '14px'
+                }}>
+                  Grado
+                </label>
+                <select
+                  value={newStudent.grade}
+                  onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                    cursor: 'pointer',
+                    background: 'white',
+                    color: colors.gray900
+                  }}
+                >
+                  <option value="">Selecciona un grado</option>
+                  <option value="3° Secundaria">3° Secundaria</option>
+                  <option value="Egresado Secundaria">Egresado de Secundaria</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: colors.gray700
+                }}>
+                  Teléfono
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: 5512345678"
+                  value={newStudent.phone}
+                  onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleCreateStudent}
+                  disabled={creatingStudent}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    background: creatingStudent ? colors.gray300 : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    fontWeight: '700',
+                    cursor: creatingStudent ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                  }}
+                >
+                  {creatingStudent ? '⏳ Creando...' : '✓ Crear Estudiante'}
+                </button>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  style={{
+                    padding: '14px 24px',
+                    background: colors.gray100,
+                    color: colors.gray700,
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Exámenes (Sumar/Restar) */}
+        {isAdmin && showExamModal && selectedStudent && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={() => {
+              setShowExamModal(false)
+              setSelectedStudent(null)
+              setExamQuantity(6)
+            }}
           >
             <div
               style={{
@@ -484,7 +927,7 @@ export default function StudentManagement() {
                 marginBottom: '8px',
                 color: colors.gray900
               }}>
-                💳 Habilitar Exámenes
+                💳 Modificar Exámenes
               </h3>
               
               <p style={{
@@ -495,7 +938,7 @@ export default function StudentManagement() {
                 <strong>{selectedStudent.full_name || selectedStudent.email}</strong>
                 <br />
                 <span style={{ fontSize: '13px' }}>
-                  Actualmente tiene {selectedStudent.exams_remaining} exámenes disponibles
+                  Exámenes actuales: {selectedStudent.exams_remaining}
                 </span>
               </p>
 
@@ -507,14 +950,12 @@ export default function StudentManagement() {
                   fontSize: '14px',
                   color: colors.gray700
                 }}>
-                  Cantidad de exámenes:
+                  Cantidad a sumar/restar:
                 </label>
                 <input
                   type="number"
-                  min="1"
-                  max="50"
                   value={examQuantity}
-                  onChange={(e) => setExamQuantity(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setExamQuantity(parseInt(e.target.value) || 0)}
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -530,16 +971,15 @@ export default function StudentManagement() {
                   color: colors.gray500,
                   margin: '8px 0 0 0'
                 }}>
-                  Precio estimado: ${examQuantity === 6 ? '150' : examQuantity * 25} MXN
+                  💡 Usa números negativos para restar (-6, -3, etc)
+                  <br />
+                  Precio estimado: ${examQuantity > 0 ? (examQuantity === 6 ? '150' : examQuantity * 25) : '0'} MXN
                 </p>
               </div>
 
-              <div style={{
-                display: 'flex',
-                gap: '12px'
-              }}>
+              <div style={{ display: 'flex', gap: '12px' }}>
                 <button
-                  onClick={handleEnableExams}
+                  onClick={handleUpdateExams}
                   style={{
                     flex: 1,
                     padding: '14px',
@@ -553,11 +993,11 @@ export default function StudentManagement() {
                     boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
                   }}
                 >
-                  ✓ Confirmar
+                  ✓ Guardar Cambios
                 </button>
                 <button
                   onClick={() => {
-                    setShowEnableModal(false)
+                    setShowExamModal(false)
                     setSelectedStudent(null)
                     setExamQuantity(6)
                   }}
@@ -573,6 +1013,456 @@ export default function StudentManagement() {
                   }}
                 >
                   Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Historial */}
+        {isAdmin && showHistoryModal && selectedStudent && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={() => {
+              setShowHistoryModal(false)
+              setSelectedStudent(null)
+              setExamHistory([])
+            }}
+          >
+            <div
+              style={{
+                background: 'white',
+                padding: '32px',
+                borderRadius: '20px',
+                maxWidth: '800px',
+                width: '100%',
+                maxHeight: '80vh',
+                overflowY: 'auto',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                marginBottom: '8px',
+                color: colors.gray900
+              }}>
+                📜 Historial de Movimientos
+              </h3>
+              
+              <p style={{
+                color: colors.gray600,
+                marginBottom: '16px',
+                fontSize: '15px'
+              }}>
+                <strong>{selectedStudent.full_name || selectedStudent.email}</strong>
+              </p>
+
+              {/* BOTÓN RESETEAR DIAGNÓSTICO */}
+              <div style={{ marginBottom: '24px' }}>
+                <button
+                  onClick={() => handleResetDiagnostic(selectedStudent)}
+                  disabled={!selectedStudent.free_diagnostic_used}
+                  style={{
+                    width: '100%',
+                    padding: '12px 24px',
+                    background: selectedStudent.free_diagnostic_used 
+                      ? gradients.success
+                      : colors.gray300,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: selectedStudent.free_diagnostic_used ? 'pointer' : 'not-allowed',
+                    opacity: selectedStudent.free_diagnostic_used ? 1 : 0.6,
+                    boxShadow: selectedStudent.free_diagnostic_used 
+                      ? '0 4px 12px rgba(16, 185, 129, 0.3)' 
+                      : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    if (selectedStudent.free_diagnostic_used) {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)'
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (selectedStudent.free_diagnostic_used) {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)'
+                    }
+                  }}
+                >
+                  {selectedStudent.free_diagnostic_used 
+                    ? '🔄 Resetear Diagnóstico Gratuito' 
+                    : '✅ Diagnóstico ya disponible'}
+                </button>
+                <p style={{
+                  fontSize: '12px',
+                  color: colors.gray500,
+                  margin: '8px 0 0 0',
+                  textAlign: 'center'
+                }}>
+                  {selectedStudent.free_diagnostic_used 
+                    ? 'El estudiante podrá tomar un nuevo diagnóstico gratuito' 
+                    : 'El estudiante aún no ha usado su diagnóstico gratuito'}
+                </p>
+              </div>
+
+              {examHistory.length === 0 ? (
+                <div style={{
+                  padding: '40px 20px',
+                  textAlign: 'center',
+                  color: colors.gray500
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                  <p style={{ fontSize: '16px', margin: 0 }}>
+                    Sin movimientos registrados
+                  </p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: colors.gray50, borderBottom: `2px solid ${colors.gray200}` }}>
+                        <th style={{
+                          padding: '12px',
+                          textAlign: 'left',
+                          fontWeight: '700',
+                          fontSize: '13px',
+                          color: colors.gray700
+                        }}>
+                          Cantidad
+                        </th>
+                        <th style={{
+                          padding: '12px',
+                          textAlign: 'left',
+                          fontWeight: '700',
+                          fontSize: '13px',
+                          color: colors.gray700
+                        }}>
+                          Método
+                        </th>
+                        <th style={{
+                          padding: '12px',
+                          textAlign: 'left',
+                          fontWeight: '700',
+                          fontSize: '13px',
+                          color: colors.gray700
+                        }}>
+                          Monto
+                        </th>
+                        <th style={{
+                          padding: '12px',
+                          textAlign: 'left',
+                          fontWeight: '700',
+                          fontSize: '13px',
+                          color: colors.gray700
+                        }}>
+                          Notas
+                        </th>
+                        <th style={{
+                          padding: '12px',
+                          textAlign: 'left',
+                          fontWeight: '700',
+                          fontSize: '13px',
+                          color: colors.gray700
+                        }}>
+                          Fecha
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {examHistory.map((h) => (
+                        <tr key={h.id} style={{ borderBottom: `1px solid ${colors.gray100}` }}>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              background: h.exams_granted > 0 ? '#DCFCE7' : '#FEE2E2',
+                              color: h.exams_granted > 0 ? '#166534' : '#991B1B'
+                            }}>
+                              {h.exams_granted > 0 ? '+' : ''}{h.exams_granted}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: colors.gray700 }}>
+                            {h.payment_method}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: colors.gray700 }}>
+                            ${h.amount_paid}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: colors.gray600 }}>
+                            {h.notes}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: colors.gray600 }}>
+                            {new Date(h.created_at).toLocaleDateString('es-MX', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false)
+                  setSelectedStudent(null)
+                  setExamHistory([])
+                }}
+                style={{
+                  marginTop: '24px',
+                  padding: '12px 24px',
+                  background: colors.gray100,
+                  color: colors.gray700,
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  width: '100%'
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Credenciales del Estudiante Creado */}
+        {showCredentialsModal && newStudentCredentials && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={() => {
+              setShowCredentialsModal(false)
+              setNewStudentCredentials(null)
+            }}
+          >
+            <div
+              style={{
+                background: 'white',
+                padding: '40px',
+                borderRadius: '20px',
+                maxWidth: '600px',
+                width: '100%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                <div style={{ fontSize: '64px', marginBottom: '16px' }}>✅</div>
+                <h3 style={{
+                  fontSize: '28px',
+                  fontWeight: '700',
+                  color: colors.gray900,
+                  marginBottom: '8px'
+                }}>
+                  ¡Estudiante Creado!
+                </h3>
+                <p style={{
+                  fontSize: '16px',
+                  color: colors.gray600
+                }}>
+                  {newStudentCredentials.name}
+                </p>
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(107, 141, 214, 0.05) 0%, rgba(52, 183, 200, 0.05) 100%)',
+                padding: '24px',
+                borderRadius: '16px',
+                border: `2px solid ${colors.primary}`,
+                marginBottom: '24px'
+              }}>
+                <p style={{
+                  fontSize: '14px',
+                  color: colors.gray600,
+                  margin: '0 0 16px 0',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  📧 Email
+                </p>
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <input
+                    type="text"
+                    value={newStudentCredentials.email}
+                    readOnly
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: `2px solid ${colors.gray200}`,
+                      borderRadius: '10px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      background: 'white',
+                      color: colors.gray900
+                    }}
+                  />
+                  <button
+                    onClick={() => copyToClipboard(newStudentCredentials.email)}
+                    style={{
+                      padding: '12px 20px',
+                      background: gradients.primary,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    📋 Copiar
+                  </button>
+                </div>
+
+                <p style={{
+                  fontSize: '14px',
+                  color: colors.gray600,
+                  margin: '0 0 16px 0',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  🔑 Contraseña Temporal
+                </p>
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center'
+                }}>
+                  <input
+                    type="text"
+                    value={newStudentCredentials.password}
+                    readOnly
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: `2px solid ${colors.gray200}`,
+                      borderRadius: '10px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      background: 'white',
+                      color: colors.gray900,
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <button
+                    onClick={() => copyToClipboard(newStudentCredentials.password)}
+                    style={{
+                      padding: '12px 20px',
+                      background: gradients.success,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    📋 Copiar
+                  </button>
+                </div>
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(251,191,36,0.1), rgba(245,158,11,0.1))',
+                padding: '16px',
+                borderRadius: '12px',
+                border: `2px solid ${colors.warning}`,
+                marginBottom: '24px'
+              }}>
+                <p style={{
+                  fontSize: '14px',
+                  color: colors.gray700,
+                  margin: 0,
+                  lineHeight: '1.6'
+                }}>
+                  ⚠️ <strong>Importante:</strong> Comparte esta contraseña con el estudiante. 
+                  El estudiante debe registrarse en la plataforma usando el email y esta contraseña temporal.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => {
+                    copyToClipboard(
+                      `Email: ${newStudentCredentials.email}\nContraseña: ${newStudentCredentials.password}`
+                    )
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    background: gradients.primary,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📋 Copiar Todo
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false)
+                    setNewStudentCredentials(null)
+                  }}
+                  style={{
+                    padding: '14px 24px',
+                    background: colors.gray100,
+                    color: colors.gray700,
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cerrar
                 </button>
               </div>
             </div>

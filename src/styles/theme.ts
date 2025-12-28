@@ -55,6 +55,11 @@ export const gradients = {
   
   // Fondos sutiles
   backgroundLight: 'linear-gradient(135deg, #F0F4FF 0%, #F0FCFF 100%)',
+  
+  // Semánticos (agregados)
+  success: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+  warning: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+  error: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
 }
 
 // Sombras

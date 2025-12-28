@@ -13,45 +13,88 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault()
   setError('')
+
+  if (!email || !password) {
+    setError('Por favor ingresa email y contraseña')
+    return
+  }
+
   setLoading(true)
 
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
     })
 
-    if (error) throw error
-    if (!data.user) throw new Error('No se pudo iniciar sesión')
+    if (signInError) {
+      console.error('Error de login:', signInError)
 
-    // ✅ LOGIN EXITOSO → SIEMPRE DASHBOARD
-    const userId = data.user.id
+      // Mensajes de error específicos
+      if (signInError.message.includes('Email not confirmed')) {
+        setError(
+          '📧 Debes confirmar tu email antes de iniciar sesión. ' +
+          'Revisa tu correo (incluyendo spam) y haz clic en el link de confirmación.'
+        )
+        return
+      }
 
-const { data: profile, error: profileError } = await supabase
-  .from('user_profiles')
-  .select('role')
-  .eq('id', userId)
-  .single()
+      if (signInError.message.includes('Invalid login credentials')) {
+        setError('❌ Email o contraseña incorrectos. Verifica tus datos.')
+        return
+      }
 
-if (profileError) {
-  throw new Error('No se pudo cargar el perfil del usuario')
-}
+      if (signInError.message.includes('Email not found')) {
+        setError(
+          '❌ No existe una cuenta con este email. ' +
+          'Si un administrador te creó la cuenta, primero debes registrarte en "Crear cuenta".'
+        )
+        return
+      }
 
-if (profile.role === 'admin') {
-  navigate('/admin')
-} else {
-  navigate('/dashboard')
-}
+      if (signInError.message.includes('User not found')) {
+        setError(
+          '❌ Usuario no encontrado. ' +
+          'Si recibiste credenciales de un administrador, primero debes registrarte.'
+        )
+        return
+      }
 
+      // Error genérico
+      setError(`Error al iniciar sesión: ${signInError.message}`)
+      return
+    }
+
+    if (!data.user) {
+      setError('Error inesperado. Intenta nuevamente.')
+      return
+    }
+
+    // Verificar rol del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single()
+
+    if (profileError) {
+      console.error('Error al obtener perfil:', profileError)
+      setError('Error al cargar tu perfil. Contacta a soporte.')
+      return
+    }
+
+    // Redirigir según el rol
+    if (profile?.role === 'admin') {
+      navigate('/admin')
+    } else if (profile?.role === 'teacher') {
+      navigate('/teacher')
+    } else {
+      navigate('/dashboard')
+    }
 
   } catch (err: any) {
-    if (err.message.includes('Invalid login credentials')) {
-      setError('Email o contraseña incorrectos')
-    } else if (err.message.includes('Email not confirmed')) {
-      setError('Por favor verifica tu correo antes de iniciar sesión')
-    } else {
-      setError(err.message || 'Error al iniciar sesión')
-    }
+    console.error('Error inesperado:', err)
+    setError('Error de conexión. Verifica tu internet e intenta nuevamente.')
   } finally {
     setLoading(false)
   }

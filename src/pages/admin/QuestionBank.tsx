@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { colors, gradients } from '../../styles/theme'
 import QuestionModal from '../../components/QuestionModal'
+import { ImportQuestionsModal } from '../../components/ImportQuestionsModal'
 
 interface Question {
   id: string
@@ -18,9 +19,22 @@ interface Question {
   option_d: string
   correct_option: string
   explanation_text: string | null
-  status: 'draft' | 'review' | 'approved'
+  status: 'pending' | 'approved' | 'rejected'
+  created_by: string | null
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
   created_at: string
   times_used: number
+  creator_name?: string
+  approver_name?: string
+}
+
+interface UserProfile {
+  id: string
+  role: 'admin' | 'teacher' | 'staff' | 'student'
+  full_name: string
+  teacher_subject?: string
 }
 
 const SUBJECTS = [
@@ -45,26 +59,140 @@ export default function QuestionBank() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+  
+  // Modal de aprobación/rechazo
+  const [approvalModal, setApprovalModal] = useState(false)
+  const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+
+  // Modal de importación
+  const [showImportModal, setShowImportModal] = useState(false)
 
   useEffect(() => {
+    checkUserRole()
     loadQuestions()
   }, [])
+
+  const checkUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        navigate('/')
+        return
+      }
+
+      const { data: profile } = await supabase
+  .from('user_profiles')
+  .select('id, role, full_name')
+  .eq('id', user.id)
+  .single()
+
+      if (!profile || !['admin', 'teacher', 'staff'].includes(profile.role)) {
+        navigate('/dashboard')
+        return
+      }
+
+      setCurrentUser(profile as UserProfile)
+    } catch (error) {
+      console.error('Error checking role:', error)
+      navigate('/')
+    }
+  }
 
   const loadQuestions = async () => {
     try {
       const { data, error } = await supabase
-        .from('question_bank')
-        .select('*')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
+  .from('question_bank')
+  .select('*')
+  .eq('active', true)
+  .order('created_at', { ascending: false })
 
       if (error) throw error
-      setQuestions(data || [])
+
+      const questionsWithNames = (data || []).map(q => ({
+  ...q,
+  creator_name: 'Usuario',
+  approver_name: null
+}))
+
+      setQuestions(questionsWithNames)
     } catch (error) {
       console.error('Error loading questions:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const canApprove = (question: Question): boolean => {
+    if (!currentUser) return false
+    
+    // Admin puede aprobar cualquier pregunta
+    if (currentUser.role === 'admin') return true
+    
+    // Profesor solo puede aprobar preguntas de su materia
+    if (currentUser.role === 'teacher' && currentUser.teacher_subject) {
+      return question.subject === currentUser.teacher_subject
+    }
+    
+    // Staff no puede aprobar
+    return false
+  }
+
+  const handleApprove = async (questionId: string) => {
+    if (!currentUser) return
+
+    try {
+      const { error } = await supabase
+        .from('question_bank')
+        .update({
+          status: 'approved',
+          approved_by: currentUser.id,
+          approved_at: new Date().toISOString(),
+          rejection_reason: null
+        })
+        .eq('id', questionId)
+
+      if (error) throw error
+
+      alert('✅ Pregunta aprobada exitosamente')
+      loadQuestions()
+      setApprovalModal(false)
+      setSelectedQuestion(null)
+    } catch (error: any) {
+      console.error('Error approving:', error)
+      alert(`❌ Error: ${error.message}`)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!currentUser || !selectedQuestion || !rejectionReason.trim()) {
+      alert('Por favor ingresa una razón para el rechazo')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('question_bank')
+        .update({
+          status: 'rejected',
+          approved_by: currentUser.id,
+          approved_at: new Date().toISOString(),
+          rejection_reason: rejectionReason
+        })
+        .eq('id', selectedQuestion.id)
+
+      if (error) throw error
+
+      alert('❌ Pregunta rechazada')
+      loadQuestions()
+      setApprovalModal(false)
+      setSelectedQuestion(null)
+      setRejectionReason('')
+    } catch (error: any) {
+      console.error('Error rejecting:', error)
+      alert(`❌ Error: ${error.message}`)
     }
   }
 
@@ -81,8 +209,8 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const stats = {
     total: questions.length,
     approved: questions.filter(q => q.status === 'approved').length,
-    diagnostic: questions.filter(q => q.purpose === 'diagnostic' || q.purpose === 'both').length,
-    exam: questions.filter(q => q.purpose === 'exam' || q.purpose === 'both').length
+    pending: questions.filter(q => q.status === 'pending').length,
+    rejected: questions.filter(q => q.status === 'rejected').length
   }
 
   const getDifficultyBadge = (difficulty: string) => {
@@ -96,11 +224,11 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
 
   const getStatusBadge = (status: string) => {
     const styles = {
-      draft: { bg: '#F3F4F6', color: '#6B7280', text: '📝 Borrador' },
-      review: { bg: '#FEF3C7', color: '#92400E', text: '👀 Revisión' },
-      approved: { bg: '#D1FAE5', color: '#065F46', text: '✅ Aprobado' }
+      pending: { bg: '#FEF3C7', color: '#92400E', text: '⏳ Pendiente' },
+      approved: { bg: '#D1FAE5', color: '#065F46', text: '✅ Aprobada' },
+      rejected: { bg: '#FEE2E2', color: '#991B1B', text: '❌ Rechazada' }
     }
-    return styles[status as keyof typeof styles] || styles.draft
+    return styles[status as keyof typeof styles] || styles.pending
   }
 
   if (loading) {
@@ -172,26 +300,49 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
                 Banco de Reactivos
               </h1>
               <p style={{ color: colors.gray500, margin: '2px 0 0 0', fontSize: '14px' }}>
-                Gestión de preguntas ECOEMS
+                Gestión de preguntas ECOEMS • {currentUser?.role === 'admin' ? 'Administrador' : currentUser?.role === 'teacher' ? 'Profesor' : 'Staff'}
               </p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              padding: '12px 24px',
-              border: `2px solid ${colors.gray200}`,
-              borderRadius: '12px',
-              backgroundColor: 'white',
-              cursor: 'pointer',
-              fontSize: '15px',
-              fontWeight: '600',
-              color: colors.gray700,
-              transition: 'all 0.2s'
-            }}
-          >
-            ← Volver al Dashboard
-          </button>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowImportModal(true)}
+              style={{
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #8B6FC9 0%, #E85D9A 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(139, 111, 201, 0.3)',
+                transition: 'transform 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              📥 Importar Excel
+            </button>
+
+            <button
+              onClick={() => navigate('/admin')}
+              style={{
+                padding: '12px 24px',
+                border: `2px solid ${colors.gray200}`,
+                borderRadius: '12px',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+                fontSize: '15px',
+                fontWeight: '600',
+                color: colors.gray700,
+                transition: 'all 0.2s'
+              }}
+            >
+              ← Volver al Dashboard
+            </button>
+          </div>
         </div>
       </header>
 
@@ -199,7 +350,7 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
         {/* Stats */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: '20px',
           marginBottom: '32px'
         }}>
@@ -226,7 +377,7 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
             border: `1px solid ${colors.gray100}`
           }}>
             <p style={{ fontSize: '14px', color: colors.gray600, margin: 0, fontWeight: '600' }}>
-              Aprobados
+              Aprobadas
             </p>
             <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0 0 0', color: '#10B981' }}>
               {stats.approved}
@@ -241,10 +392,10 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
             border: `1px solid ${colors.gray100}`
           }}>
             <p style={{ fontSize: '14px', color: colors.gray600, margin: 0, fontWeight: '600' }}>
-              Para Diagnóstico
+              Pendientes
             </p>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0 0 0', color: colors.accent }}>
-              {stats.diagnostic}
+            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0 0 0', color: '#F59E0B' }}>
+              {stats.pending}
             </p>
           </div>
 
@@ -256,10 +407,10 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
             border: `1px solid ${colors.gray100}`
           }}>
             <p style={{ fontSize: '14px', color: colors.gray600, margin: 0, fontWeight: '600' }}>
-              Para Exámenes
+              Rechazadas
             </p>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0 0 0', color: colors.purple }}>
-              {stats.exam}
+            <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0 0 0', color: '#EF4444' }}>
+              {stats.rejected}
             </p>
           </div>
         </div>
@@ -328,9 +479,9 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
               }}
             >
               <option value="all">Todos los estados</option>
-              <option value="draft">Borrador</option>
-              <option value="review">En revisión</option>
-              <option value="approved">Aprobado</option>
+              <option value="pending">⏳ Pendientes</option>
+              <option value="approved">✅ Aprobadas</option>
+              <option value="rejected">❌ Rechazadas</option>
             </select>
           </div>
 
@@ -369,24 +520,24 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
               📚 Reactivos ({filteredQuestions.length})
             </h2>
             <button
-  onClick={() => {
-    setEditingQuestion(null)
-    setModalOpen(true)
-  }}
-  style={{
-    padding: '12px 24px',
-    background: gradients.primary,
-    color: 'white',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
-  }}
->
-  ➕ Nuevo Reactivo
-</button>
+              onClick={() => {
+                setEditingQuestion(null)
+                setModalOpen(true)
+              }}
+              style={{
+                padding: '12px 24px',
+                background: gradients.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '15px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
+              }}
+            >
+              ➕ Nuevo Reactivo
+            </button>
           </div>
 
           {filteredQuestions.length === 0 ? (
@@ -403,6 +554,7 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
               {filteredQuestions.map((question) => {
                 const diffBadge = getDifficultyBadge(question.difficulty)
                 const statusBadge = getStatusBadge(question.status)
+                const canApproveThis = canApprove(question)
 
                 return (
                   <div
@@ -417,7 +569,7 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
                   >
                     <div style={{ display: 'flex', gap: '20px', alignItems: 'start' }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{
                             padding: '6px 12px',
                             borderRadius: '8px',
@@ -461,6 +613,24 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
                           }}>
                             {question.topic}
                           </span>
+
+                          <span style={{
+                            fontSize: '12px',
+                            color: colors.gray500,
+                            fontStyle: 'italic'
+                          }}>
+                            Por: {question.creator_name}
+                          </span>
+
+                          {question.approved_by && (
+                            <span style={{
+                              fontSize: '12px',
+                              color: colors.gray500,
+                              fontStyle: 'italic'
+                            }}>
+                              • Aprobada por: {question.approver_name}
+                            </span>
+                          )}
                         </div>
 
                         <p style={{
@@ -513,27 +683,63 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
                             💡 <strong>Explicación:</strong> {question.explanation_text}
                           </p>
                         )}
+
+                        {question.rejection_reason && (
+                          <p style={{
+                            fontSize: '14px',
+                            color: '#991B1B',
+                            margin: '12px 0 0 0',
+                            padding: '12px',
+                            background: '#FEE2E2',
+                            borderRadius: '8px',
+                            borderLeft: `4px solid #EF4444`
+                          }}>
+                            ❌ <strong>Razón del rechazo:</strong> {question.rejection_reason}
+                          </p>
+                        )}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
                         <button
-  onClick={() => {
-    setEditingQuestion(question)
-    setModalOpen(true)
-  }}
-  style={{
-    padding: '10px 16px',
-    background: 'white',
-    border: `2px solid ${colors.gray200}`,
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: colors.gray700
-  }}
->
-  ✏️ Editar
-</button>
+                          onClick={() => {
+                            setEditingQuestion(question)
+                            setModalOpen(true)
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            background: 'white',
+                            border: `2px solid ${colors.gray200}`,
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: colors.gray700
+                          }}
+                        >
+                          ✏️ Editar
+                        </button>
+
+                        {question.status === 'pending' && canApproveThis && (
+                          <button
+                            onClick={() => {
+                              setSelectedQuestion(question)
+                              setApprovalModal(true)
+                            }}
+                            style={{
+                              padding: '10px 16px',
+                              background: gradients.success,
+                              border: 'none',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: 'white',
+                              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                            }}
+                          >
+                            ✓ Revisar
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -544,24 +750,171 @@ const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
         </div>
       </div>
 
+      {/* Modal de Pregunta */}
+      <QuestionModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false)
+          setEditingQuestion(null)
+        }}
+        onSave={() => {
+          loadQuestions()
+        }}
+        editingQuestion={editingQuestion}
+        currentUser={currentUser}
+      />
+
+      {/* Modal de Aprobación/Rechazo */}
+      {approvalModal && selectedQuestion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '32px',
+            borderRadius: '20px',
+            maxWidth: '600px',
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <h3 style={{
+              fontSize: '24px',
+              fontWeight: '700',
+              marginBottom: '16px',
+              color: colors.gray900
+            }}>
+              Revisar Pregunta
+            </h3>
+
+            <p style={{
+              fontSize: '16px',
+              color: colors.gray700,
+              marginBottom: '20px',
+              lineHeight: '1.6'
+            }}>
+              {selectedQuestion.question_text}
+            </p>
+
+            <div style={{
+              background: colors.gray50,
+              padding: '16px',
+              borderRadius: '12px',
+              marginBottom: '24px'
+            }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                fontSize: '14px',
+                color: colors.gray700
+              }}>
+                Razón del rechazo (opcional si apruebas)
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Ej: La respuesta correcta no está bien fundamentada..."
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: `2px solid ${colors.gray200}`,
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => handleApprove(selectedQuestion.id)}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: gradients.success,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                ✓ Aprobar
+              </button>
+
+              <button
+                onClick={handleReject}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: gradients.error,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                ✗ Rechazar
+              </button>
+
+              <button
+                onClick={() => {
+                  setApprovalModal(false)
+                  setSelectedQuestion(null)
+                  setRejectionReason('')
+                }}
+                style={{
+                  padding: '14px 20px',
+                  background: colors.gray100,
+                  color: colors.gray700,
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Importación */}
+      <ImportQuestionsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={() => {
+          setShowImportModal(false)
+          loadQuestions()
+        }}
+      />
+
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
       `}</style>
-      {/* Modal */}
-<QuestionModal
-  isOpen={modalOpen}
-  onClose={() => {
-    setModalOpen(false)
-    setEditingQuestion(null)
-  }}
-  onSave={() => {
-    loadQuestions()
-  }}
-  editingQuestion={editingQuestion}
-/>
     </div>
   )
 }

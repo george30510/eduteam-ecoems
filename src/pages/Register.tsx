@@ -214,17 +214,17 @@ export default function Register() {
           />
 
           <select
-            value={formData.grade}
-            onChange={(e) =>
-              setFormData({ ...formData, grade: e.target.value })
-            }
-            style={inputStyle}
-          >
-            <option value="">Selecciona tu grado</option>
-            <option value="3ro Secundaria">3ro Secundaria</option>
-            <option value="Preparatoria">Preparatoria</option>
-            <option value="Otro">Otro</option>
-          </select>
+  value={formData.grade}
+  onChange={(e) =>
+    setFormData({ ...formData, grade: e.target.value })
+  }
+  style={inputStyle}
+>
+  <option value="">Selecciona tu grado</option>
+  <option value="3° Secundaria">3° Secundaria</option>
+  <option value="Egresado Secundaria">Egresado de Secundaria</option>
+  <option value="Otro">Otro</option>
+</select>
 
           <input
             type="password"

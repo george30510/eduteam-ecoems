@@ -7,6 +7,7 @@ interface QuestionModalProps {
   onClose: () => void
   onSave: () => void
   editingQuestion?: any
+  currentUser: any
 }
 
 const SUBJECTS = [
@@ -22,7 +23,7 @@ const SUBJECTS = [
   'Biología'
 ]
 
-export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion }: QuestionModalProps) {
+export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion, currentUser }: QuestionModalProps) {
   const [formData, setFormData] = useState({
     subject: '',
     topic: '',
@@ -39,7 +40,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
     correct_option: 'A' as 'A' | 'B' | 'C' | 'D',
     explanation_text: '',
     explanation_equation: '',
-    status: 'draft' as 'draft' | 'review' | 'approved'
+    status: 'pending' as 'pending' | 'approved' | 'rejected'
   })
 
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -66,7 +67,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
         correct_option: editingQuestion.correct_option || 'A',
         explanation_text: editingQuestion.explanation_text || '',
         explanation_equation: editingQuestion.explanation_equation || '',
-        status: editingQuestion.status || 'draft'
+        status: editingQuestion.status || 'pending'
       })
       setImageFile(null)
     } else {
@@ -86,7 +87,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
         correct_option: 'A',
         explanation_text: '',
         explanation_equation: '',
-        status: 'draft'
+        status: 'pending'
       })
       setImageFile(null)
     }
@@ -124,8 +125,21 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
   }
 
   const handleAIHelp = async () => {
-    // TODO: Integrar con API de IA
     alert('Función de IA en desarrollo. Próximamente te ayudaré a mejorar la pregunta y explicación.')
+  }
+
+  const canApprove = (): boolean => {
+    if (!currentUser) return false
+    
+    // Admin puede aprobar
+    if (currentUser.role === 'admin') return true
+    
+    // Profesor puede aprobar si es su materia
+    if (currentUser.role === 'teacher' && currentUser.teacher_subject) {
+      return formData.subject === currentUser.teacher_subject
+    }
+    
+    return false
   }
 
   const handleSave = async () => {
@@ -171,17 +185,28 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
 
       if (editingQuestion) {
         // Actualizar
+        const updateData: any = { ...dataToSave }
+        
+        // Solo permitir cambiar status si tiene permisos
+        if (!canApprove()) {
+          delete updateData.status
+        }
+
         const { error } = await supabase
           .from('question_bank')
-          .update(dataToSave)
+          .update(updateData)
           .eq('id', editingQuestion.id)
 
         if (error) throw error
       } else {
-        // Crear nuevo
+        // Crear nuevo - siempre en estado "pending"
         const { error } = await supabase
           .from('question_bank')
-          .insert([dataToSave])
+          .insert([{
+            ...dataToSave,
+            status: 'pending',
+            created_by: currentUser?.id || null
+          }])
 
         if (error) throw error
       }
@@ -251,7 +276,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
               margin: '8px 0 0 0',
               fontSize: '15px'
             }}>
-              {editingQuestion ? 'Modifica los campos necesarios' : 'Completa la información del reactivo'}
+              {editingQuestion ? 'Modifica los campos necesarios' : 'Las preguntas nuevas quedarán en estado "Pendiente" hasta ser aprobadas'}
             </p>
           </div>
 
@@ -473,140 +498,141 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
             </div>
 
             {/* Imagen */}
-<div style={{ marginBottom: '24px' }}>
-  <label style={{
-    display: 'block',
-    marginBottom: '8px',
-    fontWeight: '600',
-    color: colors.gray700,
-    fontSize: '14px'
-  }}>
-    Imagen (opcional)
-  </label>
-  
-  {/* Tabs para elegir método */}
-  <div style={{
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '12px',
-    background: colors.gray50,
-    padding: '6px',
-    borderRadius: '10px'
-  }}>
-    <button
-      type="button"
-      onClick={() => {
-        setFormData({ ...formData, question_image: '' })
-      }}
-      style={{
-        flex: 1,
-        padding: '10px 16px',
-        background: !formData.question_image && !imageFile ? 'white' : 'transparent',
-        color: !formData.question_image && !imageFile ? colors.primary : colors.gray600,
-        border: 'none',
-        borderRadius: '8px',
-        fontSize: '14px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-        boxShadow: !formData.question_image && !imageFile ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
-      }}
-    >
-      📤 Subir Archivo
-    </button>
-    <button
-      type="button"
-      onClick={() => {
-        setImageFile(null)
-        setFormData({ ...formData, question_image: 'https://' })
-      }}
-      style={{
-        flex: 1,
-        padding: '10px 16px',
-        background: formData.question_image && !imageFile ? 'white' : 'transparent',
-        color: formData.question_image && !imageFile ? colors.primary : colors.gray600,
-        border: 'none',
-        borderRadius: '8px',
-        fontSize: '14px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-        boxShadow: formData.question_image && !imageFile ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
-      }}
-    >
-      🔗 URL Externa
-    </button>
-  </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                color: colors.gray700,
+                fontSize: '14px'
+              }}>
+                Imagen (opcional)
+              </label>
+              
+              {/* Tabs para elegir método */}
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '12px',
+                background: colors.gray50,
+                padding: '6px',
+                borderRadius: '10px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData({ ...formData, question_image: '' })
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    background: !formData.question_image && !imageFile ? 'white' : 'transparent',
+                    color: !formData.question_image && !imageFile ? colors.primary : colors.gray600,
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: !formData.question_image && !imageFile ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  📤 Subir Archivo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageFile(null)
+                    setFormData({ ...formData, question_image: 'https://' })
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    background: formData.question_image && !imageFile ? 'white' : 'transparent',
+                    color: formData.question_image && !imageFile ? colors.primary : colors.gray600,
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: formData.question_image && !imageFile ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  🔗 URL Externa
+                </button>
+              </div>
 
-  {/* Input de archivo o URL según selección */}
-  {formData.question_image && !imageFile ? (
-    // Modo URL
-    <input
-      type="url"
-      value={formData.question_image}
-      onChange={(e) => setFormData({ ...formData, question_image: e.target.value })}
-      placeholder="https://ejemplo.com/imagen.jpg"
-      style={{
-        width: '100%',
-        padding: '14px',
-        border: `2px solid ${colors.gray200}`,
-        borderRadius: '12px',
-        fontSize: '15px',
-        boxSizing: 'border-box'
-      }}
-    />
-  ) : (
-    // Modo Archivo
-    <input
-      type="file"
-      accept="image/*"
-      onChange={(e) => {
-        setImageFile(e.target.files?.[0] || null)
-        setFormData({ ...formData, question_image: '' })
-      }}
-      style={{
-        width: '100%',
-        padding: '14px',
-        border: `2px solid ${colors.gray200}`,
-        borderRadius: '12px',
-        fontSize: '15px',
-        boxSizing: 'border-box',
-        cursor: 'pointer'
-      }}
-    />
-  )}
+              {/* Input de archivo o URL según selección */}
+              {formData.question_image && !imageFile ? (
+                // Modo URL
+                <input
+                  type="url"
+                  value={formData.question_image}
+                  onChange={(e) => setFormData({ ...formData, question_image: e.target.value })}
+                  placeholder="https://ejemplo.com/imagen.jpg"
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              ) : (
+                // Modo Archivo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    setImageFile(e.target.files?.[0] || null)
+                    setFormData({ ...formData, question_image: '' })
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    border: `2px solid ${colors.gray200}`,
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                    cursor: 'pointer'
+                  }}
+                />
+              )}
 
-  {/* Preview */}
-  {(imageFile || (formData.question_image && formData.question_image !== 'https://')) && (
-    <div style={{ marginTop: '12px' }}>
-      <img
-        src={imageFile ? URL.createObjectURL(imageFile) : formData.question_image}
-        alt="Preview"
-        onError={(e) => {
-          const target = e.currentTarget as HTMLImageElement
-          target.src = 'https://via.placeholder.com/400x300?text=Error+cargando+imagen'
-        }}
-        style={{
-          maxWidth: '100%',
-          maxHeight: '200px',
-          borderRadius: '8px',
-          border: `1px solid ${colors.gray200}`,
-          display: 'block'
-        }}
-      />
-      {formData.question_image && !imageFile && (
-        <p style={{
-          fontSize: '12px',
-          color: colors.gray500,
-          margin: '8px 0 0 0',
-          fontStyle: 'italic'
-        }}>
-          🔗 {formData.question_image}
-        </p>
-      )}
-    </div>
-  )}
-</div>
+              {/* Preview */}
+              {(imageFile || (formData.question_image && formData.question_image !== 'https://')) && (
+                <div style={{ marginTop: '12px' }}>
+                  <img
+                    src={imageFile ? URL.createObjectURL(imageFile) : formData.question_image}
+                    alt="Preview"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement
+                      target.src = 'https://via.placeholder.com/400x300?text=Error+cargando+imagen'
+                    }}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '200px',
+                      borderRadius: '8px',
+                      border: `1px solid ${colors.gray200}`,
+                      display: 'block'
+                    }}
+                  />
+                  {formData.question_image && !imageFile && (
+                    <p style={{
+                      fontSize: '12px',
+                      color: colors.gray500,
+                      margin: '8px 0 0 0',
+                      fontStyle: 'italic'
+                    }}>
+                      🔗 {formData.question_image}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Ecuación LaTeX */}
             <div style={{ marginBottom: '24px' }}>
               <label style={{
@@ -726,8 +752,8 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
               />
             </div>
 
-            {/* Status (solo si está editando) */}
-            {editingQuestion && (
+            {/* Status (solo si está editando Y tiene permisos) */}
+            {editingQuestion && canApprove() && (
               <div style={{ marginBottom: '24px' }}>
                 <label style={{
                   display: 'block',
@@ -751,9 +777,9 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="draft">📝 Borrador</option>
-                  <option value="review">👀 En Revisión</option>
+                  <option value="pending">⏳ Pendiente</option>
                   <option value="approved">✅ Aprobado</option>
+                  <option value="rejected">❌ Rechazado</option>
                 </select>
               </div>
             )}
@@ -875,6 +901,10 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                 <img
                   src={imageFile ? URL.createObjectURL(imageFile) : formData.question_image}
                   alt="Imagen pregunta"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement
+                    target.src = 'https://via.placeholder.com/400x300?text=Error+cargando+imagen'
+                  }}
                   style={{
                     maxWidth: '100%',
                     borderRadius: '12px',

@@ -6,9 +6,17 @@ import { colors, gradients } from '../../styles/theme'
 interface ExamHistory {
   id: string
   exam_type: string
+  exam_number: number
   completed_at: string
   score: number
   total_questions: number
+  percentage: number
+}
+
+interface SubjectAnalysis {
+  subject: string
+  total: number
+  correctas: number
   percentage: number
 }
 
@@ -18,6 +26,7 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState<any>(null)
   const [profileMissing, setProfileMissing] = useState(false)
   const [exams, setExams] = useState<ExamHistory[]>([])
+  const [subjectAnalysis, setSubjectAnalysis] = useState<SubjectAnalysis[]>([])
   const [loading, setLoading] = useState(true)
 
   /* =============================
@@ -63,6 +72,7 @@ export default function StudentDashboard() {
     setProfile(profileData)
     setProfileMissing(false)
     await loadExams(user.id)
+    await loadSubjectAnalysis(user.id)
     setLoading(false)
   }
 
@@ -82,6 +92,69 @@ export default function StudentDashboard() {
     } catch (error) {
       console.error('Error loading exams:', error)
     }
+  }
+
+  /* =============================
+     LOAD SUBJECT ANALYSIS
+  ============================== */
+  const loadSubjectAnalysis = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('student_answers')
+        .select('subject, is_correct')
+        .eq('student_id', userId)
+
+      if (!data || data.length === 0) {
+        setSubjectAnalysis([])
+        return
+      }
+
+      // Agrupar por materia
+      const subjectMap: { [key: string]: { total: number; correctas: number } } = {}
+
+      data.forEach((answer) => {
+        const subject = answer.subject
+        if (!subjectMap[subject]) {
+          subjectMap[subject] = { total: 0, correctas: 0 }
+        }
+        subjectMap[subject].total++
+        if (answer.is_correct) {
+          subjectMap[subject].correctas++
+        }
+      })
+
+      // Convertir a array y calcular porcentajes
+      const analysis: SubjectAnalysis[] = Object.entries(subjectMap).map(
+        ([subject, stats]) => ({
+          subject,
+          total: stats.total,
+          correctas: stats.correctas,
+          percentage: Math.round((stats.correctas / stats.total) * 100),
+        })
+      )
+
+      // Ordenar por porcentaje ascendente (peores primero)
+      analysis.sort((a, b) => a.percentage - b.percentage)
+
+      setSubjectAnalysis(analysis)
+    } catch (error) {
+      console.error('Error loading subject analysis:', error)
+    }
+  }
+
+  /* =============================
+     FORMAT DATE
+  ============================== */
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }
+    return date.toLocaleDateString('es-MX', options)
   }
 
   /* =============================
@@ -220,6 +293,7 @@ export default function StudentDashboard() {
       {/* CONTENIDO */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px 20px' }}>
 
+        {/* BIENVENIDA Y CONTADOR */}
         <div style={{
           background: 'white',
           padding: '40px',
@@ -230,27 +304,281 @@ export default function StudentDashboard() {
           <h2 style={{ fontSize: '32px', margin: 0 }}>
             ¡Bienvenido, {profile?.full_name?.split(' ')[0] ?? 'Alumno'}! 👋
           </h2>
-          <p style={{ color: colors.gray600 }}>
-            Tienes <strong>{profile?.exams_remaining ?? 0}</strong> exámenes disponibles
+          <p style={{ color: colors.gray600, fontSize: '18px', marginTop: '8px' }}>
+            Tienes <strong style={{ color: colors.primary }}>{profile?.exams_remaining ?? 0}</strong> exámenes disponibles
           </p>
+
+          {/* BOTÓN DIAGNÓSTICO GRATIS */}
+          {profile && !profile.free_diagnostic_used && (
+            <button
+              onClick={() => navigate('/exam/diagnostic')}
+              style={{
+                marginTop: '20px',
+                padding: '18px 32px',
+                borderRadius: '12px',
+                background: gradients.success,
+                color: 'white',
+                border: 'none',
+                fontSize: '18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                transition: 'transform 0.2s, box-shadow 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              🚀 Iniciar diagnóstico gratuito
+            </button>
+          )}
         </div>
 
-        {profile && !profile.free_diagnostic_used && (
-          <button
-            onClick={() => navigate('/exam/diagnostic')}
-            style={{
-              padding: '18px 32px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #10B981, #059669)',
-              color: 'white',
-              border: 'none',
-              fontSize: '18px',
-              fontWeight: '700',
-              cursor: 'pointer'
-            }}
-          >
-            🚀 Iniciar diagnóstico gratuito
-          </button>
+        {/* MI RENDIMIENTO POR MATERIA */}
+        {subjectAnalysis.length > 0 && (
+          <div style={{ marginTop: '40px', marginBottom: '40px' }}>
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: 'bold',
+              marginBottom: '20px',
+              color: colors.gray900
+            }}>
+              📈 Mi Rendimiento por Materia
+            </h2>
+
+            <div style={{
+              background: 'white',
+              padding: '32px',
+              borderRadius: '20px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {subjectAnalysis.map((subject) => (
+                  <div
+                    key={subject.subject}
+                    style={{
+                      padding: '20px',
+                      borderRadius: '12px',
+                      background: colors.gray50,
+                      border: `2px solid ${
+                        subject.percentage >= 70 ? colors.success : colors.gray200
+                      }`,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {/* Header */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}>
+                      <h3 style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: colors.gray900,
+                        margin: 0
+                      }}>
+                        {subject.subject}
+                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{
+                          fontSize: '24px',
+                          fontWeight: 'bold',
+                          color: subject.percentage >= 70 ? colors.success : colors.error
+                        }}>
+                          {subject.percentage}%
+                        </span>
+                        {subject.percentage < 70 && (
+                          <span style={{
+                            padding: '4px 12px',
+                            borderRadius: '6px',
+                            background: gradients.warning,
+                            color: 'white',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            ⚠️ Enfócate aquí
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso */}
+                    <div style={{
+                      width: '100%',
+                      height: '12px',
+                      background: colors.gray200,
+                      borderRadius: '6px',
+                      overflow: 'hidden',
+                      marginBottom: '8px'
+                    }}>
+                      <div style={{
+                        width: `${subject.percentage}%`,
+                        height: '100%',
+                        background: subject.percentage >= 70 ? gradients.success : gradients.error,
+                        transition: 'width 0.5s ease-out',
+                        borderRadius: '6px'
+                      }} />
+                    </div>
+
+                    {/* Detalles */}
+                    <p style={{
+                      fontSize: '14px',
+                      color: colors.gray600,
+                      margin: 0
+                    }}>
+                      {subject.correctas} de {subject.total} preguntas correctas
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HISTORIAL DE EXÁMENES */}
+        {exams.length > 0 && (
+          <div style={{ marginTop: '40px' }}>
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: 'bold',
+              marginBottom: '20px',
+              color: colors.gray900
+            }}>
+              📊 Mis Exámenes Completados
+            </h2>
+            
+            <div style={{ display: 'grid', gap: '16px' }}>
+              {exams.map(exam => (
+                <div key={exam.id} style={{
+                  background: 'white',
+                  padding: '24px',
+                  borderRadius: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '24px',
+                  transition: 'box-shadow 0.2s, transform 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ 
+                      fontSize: '18px', 
+                      fontWeight: '700', 
+                      marginBottom: '12px',
+                      color: colors.gray900
+                    }}>
+                      {exam.exam_type === 'diagnostico' 
+                        ? '🎯 Diagnóstico Gratuito' 
+                        : `📝 Examen Completo #${exam.exam_number}`}
+                    </h3>
+                    
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'baseline', 
+                      gap: '16px',
+                      marginBottom: '8px'
+                    }}>
+                      <span style={{ 
+                        fontSize: '36px', 
+                        fontWeight: 'bold', 
+                        color: exam.percentage >= 70 ? colors.success : colors.error
+                      }}>
+                        {exam.percentage}%
+                      </span>
+                      <span style={{ 
+                        fontSize: '16px',
+                        color: colors.gray600,
+                        fontWeight: '500'
+                      }}>
+                        {exam.score}/{exam.total_questions} correctas
+                      </span>
+                    </div>
+                    
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: colors.gray500, 
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      📅 {formatDate(exam.completed_at)}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => navigate(`/results/${exam.id}`)}
+                    style={{
+                      padding: '12px 24px',
+                      background: gradients.primary,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 2px 8px rgba(107, 141, 214, 0.3)',
+                      transition: 'transform 0.2s, box-shadow 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 141, 214, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(107, 141, 214, 0.3)'
+                    }}
+                  >
+                    Ver Detalles →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MENSAJE SI NO HAY EXÁMENES */}
+        {exams.length === 0 && profile && profile.free_diagnostic_used && (
+          <div style={{
+            background: 'white',
+            padding: '40px',
+            borderRadius: '16px',
+            textAlign: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }}>
+            <div style={{ fontSize: '64px', marginBottom: '16px' }}>📚</div>
+            <h3 style={{ 
+              fontSize: '20px', 
+              fontWeight: '700', 
+              color: colors.gray700,
+              marginBottom: '8px'
+            }}>
+              Aún no has completado ningún examen
+            </h3>
+            <p style={{ color: colors.gray500, fontSize: '16px' }}>
+              Tus exámenes completados aparecerán aquí
+            </p>
+          </div>
         )}
 
       </div>
