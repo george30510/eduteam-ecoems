@@ -13,6 +13,7 @@ import ResetPassword from './pages/ResetPassword'
 import StudentManagement from './pages/admin/StudentManagement'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import StudentDetail from './pages/teacher/StudentDetail'
+import AdminStudentExams from './pages/admin/AdminStudentExams'
 
 function App() {
   return (
@@ -34,6 +35,8 @@ function App() {
         <Route path="/admin/panel" element={<AdminPanel />} />
         <Route path="/admin/questions" element={<QuestionBank />} />
         <Route path="/admin/students" element={<StudentManagement />} />
+        <Route path="/admin/student-exams/:studentId" element={<AdminStudentExams />} />
+        <Route path="/admin/exam-result/:examId" element={<Results />} />
         
         {/* Teacher Routes */}
         <Route path="/teacher" element={<TeacherDashboard />} />

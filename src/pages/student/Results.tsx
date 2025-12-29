@@ -32,6 +32,9 @@ export default function Results() {
   const location = useLocation()
   const { examId: urlExamId } = useParams()
   
+  // Detectar si es vista de admin
+  const isAdminView = location.pathname.includes('/admin/')
+  
   // Prioridad: state de navegación > URL params
   const stateData = location.state || {}
   const examIdToUse = stateData.examId || urlExamId
@@ -42,6 +45,7 @@ export default function Results() {
   const [showDetails, setShowDetails] = useState(false)
   const [filterSubject, setFilterSubject] = useState<string>('all')
   const [error, setError] = useState(false)
+  const [studentName, setStudentName] = useState<string>('')
 
   useEffect(() => {
     if (examIdToUse) {
@@ -79,6 +83,19 @@ export default function Results() {
         completed_at: exam.completed_at
       })
 
+      // Si es admin, cargar nombre del estudiante
+      if (isAdminView && exam.user_id) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('full_name')
+          .eq('id', exam.user_id)
+          .single()
+        
+        if (profile) {
+          setStudentName(profile.full_name)
+        }
+      }
+
       // 2. Cargar respuestas desde questions_data (JSONB)
       if (exam.questions_data) {
         // Cargar explicaciones de las preguntas
@@ -115,6 +132,14 @@ export default function Results() {
       setError(true)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoBack = () => {
+    if (isAdminView) {
+      navigate(-1) // Volver a la lista de exámenes del estudiante
+    } else {
+      navigate('/dashboard')
     }
   }
 
@@ -186,7 +211,7 @@ export default function Results() {
             El examen que buscas no existe o no tienes permiso para verlo.
           </p>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={handleGoBack}
             style={{
               padding: '16px 32px',
               background: gradients.primary,
@@ -199,7 +224,7 @@ export default function Results() {
               boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
             }}
           >
-            🏠 Volver al Dashboard
+            ← Volver
           </button>
         </div>
       </div>
@@ -246,6 +271,18 @@ export default function Results() {
           boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
           textAlign: 'center'
         }}>
+          {/* Nombre del estudiante si es admin */}
+          {isAdminView && studentName && (
+            <div style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: colors.gray600,
+              marginBottom: '16px'
+            }}>
+              Estudiante: {studentName}
+            </div>
+          )}
+
           <div style={{ fontSize: '72px', marginBottom: '16px' }}>
             {grade.emoji}
           </div>
@@ -557,7 +594,7 @@ export default function Results() {
                                 color: '#DC2626',
                                 fontWeight: '600'
                               }}>
-                                ✗ Tu respuesta (incorrecta)
+                                ✗ {isAdminView ? 'Respuesta del estudiante' : 'Tu respuesta'} (incorrecta)
                               </p>
                             )}
                           </div>
@@ -607,7 +644,7 @@ export default function Results() {
           flexWrap: 'wrap'
         }}>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={handleGoBack}
             style={{
               padding: '16px 32px',
               background: gradients.primary,
@@ -620,7 +657,7 @@ export default function Results() {
               boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)'
             }}
           >
-            🏠 Volver al Dashboard
+            ← Volver
           </button>
         </div>
       </div>

@@ -641,7 +641,7 @@ export default function StudentManagement() {
                               💳 Exámenes
                             </button>
                             <button
-                              onClick={() => handleViewHistory(student)}
+                              onClick={() => navigate(`/admin/student-exams/${student.id}`)}
                               style={{
                                 padding: '8px 16px',
                                 background: 'white',

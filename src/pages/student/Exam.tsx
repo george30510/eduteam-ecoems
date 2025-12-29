@@ -40,7 +40,7 @@ export default function Exam() {
   const [showOverview, setShowOverview] = useState(false)
 
   const isDiagnostic = type === 'diagnostic'
-  const totalQuestions = isDiagnostic ? 10 : 10
+  const totalQuestions = isDiagnostic ? 30 : 128
   const totalMinutes = isDiagnostic ? 30 : 180
 
   useEffect(() => {
@@ -288,15 +288,7 @@ export default function Exam() {
 
     console.log('🎉 EXAMEN COMPLETADO EXITOSAMENTE')
     
-    navigate('/results', {
-      state: {
-        examId: examData.id,
-        score: correct,
-        total: questions.length,
-        percentage,
-        examType: type
-      }
-    })
+    navigate(`/results/${examData.id}`)
 
   } catch (error: any) {
     console.error('💥 ERROR CRÍTICO:', error)
