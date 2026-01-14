@@ -29,12 +29,8 @@ export default function StudentDashboard() {
   const [subjectAnalysis, setSubjectAnalysis] = useState<SubjectAnalysis[]>([])
   const [loading, setLoading] = useState(true)
 
-  /* =============================
-     AUTH + PROFILE
-  ============================== */
   useEffect(() => {
     checkAuth()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const checkAuth = async () => {
@@ -53,7 +49,6 @@ export default function StudentDashboard() {
       .eq('id', user.id)
       .single()
 
-    // PERFIL NO EXISTE AÚN
     if (error || !profileData) {
       setProfile(null)
       setProfileMissing(true)
@@ -61,14 +56,12 @@ export default function StudentDashboard() {
       return
     }
 
-    // 👉 REDIRECCIÓN ADMIN
     if (profileData.role === 'admin') {
       navigate('/admin')
       setLoading(false)
       return
     }
 
-    // ALUMNO NORMAL
     setProfile(profileData)
     setProfileMissing(false)
     await loadExams(user.id)
@@ -76,9 +69,6 @@ export default function StudentDashboard() {
     setLoading(false)
   }
 
-  /* =============================
-     LOAD EXAMS
-  ============================== */
   const loadExams = async (userId: string) => {
     try {
       const { data } = await supabase
@@ -94,9 +84,6 @@ export default function StudentDashboard() {
     }
   }
 
-  /* =============================
-     LOAD SUBJECT ANALYSIS
-  ============================== */
   const loadSubjectAnalysis = async (userId: string) => {
     try {
       const { data } = await supabase
@@ -109,7 +96,6 @@ export default function StudentDashboard() {
         return
       }
 
-      // Agrupar por materia
       const subjectMap: { [key: string]: { total: number; correctas: number } } = {}
 
       data.forEach((answer) => {
@@ -123,7 +109,6 @@ export default function StudentDashboard() {
         }
       })
 
-      // Convertir a array y calcular porcentajes
       const analysis: SubjectAnalysis[] = Object.entries(subjectMap).map(
         ([subject, stats]) => ({
           subject,
@@ -133,18 +118,13 @@ export default function StudentDashboard() {
         })
       )
 
-      // Ordenar por porcentaje ascendente (peores primero)
       analysis.sort((a, b) => a.percentage - b.percentage)
-
       setSubjectAnalysis(analysis)
     } catch (error) {
       console.error('Error loading subject analysis:', error)
     }
   }
 
-  /* =============================
-     FORMAT DATE
-  ============================== */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     const options: Intl.DateTimeFormatOptions = {
@@ -157,17 +137,31 @@ export default function StudentDashboard() {
     return date.toLocaleDateString('es-MX', options)
   }
 
-  /* =============================
-     LOGOUT
-  ============================== */
   const handleLogout = async () => {
     await supabase.auth.signOut()
     navigate('/')
   }
 
-  /* =============================
-     LOADING
-  ============================== */
+  // Calcular qué exámenes están disponibles
+  const getAvailableExams = () => {
+    const examsPurchased = profile?.exams_purchased || 0
+    const examsRemaining = profile?.exams_remaining || 0
+    
+    return Array.from({ length: 6 }, (_, i) => {
+      const examNumber = i + 1
+      const completed = exams.find(e => e.exam_type === 'completo' && e.exam_number === examNumber)
+      const canTake = examNumber <= examsPurchased && examsRemaining > 0
+      const isLocked = examNumber > examsPurchased
+      
+      return {
+        number: examNumber,
+        completed,
+        canTake,
+        isLocked
+      }
+    })
+  }
+
   if (loading) {
     return (
       <div style={{
@@ -195,14 +189,12 @@ export default function StudentDashboard() {
     )
   }
 
-  // PROTECCIÓN EXTRA (por si acaso)
   if (profile?.role === 'admin') {
     return null
   }
 
-  /* =============================
-     UI
-  ============================== */
+  const availableExams = getAvailableExams()
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F0F4FF 0%, #F0FCFF 100%)' }}>
 
@@ -266,7 +258,6 @@ export default function StudentDashboard() {
         </div>
       </header>
 
-      {/* PERFIL NO LISTO */}
       {profileMissing && (
         <div style={{
           margin: '24px auto',
@@ -290,10 +281,9 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* CONTENIDO */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px 20px' }}>
 
-        {/* BIENVENIDA Y CONTADOR */}
+        {/* BIENVENIDA */}
         <div style={{
           background: 'white',
           padding: '40px',
@@ -308,7 +298,7 @@ export default function StudentDashboard() {
             Tienes <strong style={{ color: colors.primary }}>{profile?.exams_remaining ?? 0}</strong> exámenes disponibles
           </p>
 
-          {/* BOTÓN DIAGNÓSTICO GRATIS */}
+          {/* DIAGNÓSTICO GRATIS */}
           {profile && !profile.free_diagnostic_used && (
             <button
               onClick={() => navigate('/exam/diagnostic')}
@@ -339,9 +329,239 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* MI RENDIMIENTO POR MATERIA */}
+        {/* 6 EXÁMENES ÚNICOS */}
+        <div style={{ marginBottom: '40px' }}>
+          <h2 style={{
+            fontSize: '24px',
+            fontWeight: 'bold',
+            marginBottom: '20px',
+            color: colors.gray900
+          }}>
+            📝 Exámenes COMIPEMS
+          </h2>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: '20px'
+          }}>
+            {availableExams.map(exam => (
+              <div
+                key={exam.number}
+                style={{
+                  background: 'white',
+                  padding: '28px',
+                  borderRadius: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  border: `2px solid ${
+                    exam.completed ? colors.success :
+                    exam.canTake ? colors.primary :
+                    colors.gray200
+                  }`,
+                  transition: 'all 0.2s',
+                  opacity: exam.isLocked ? 0.6 : 1
+                }}
+              >
+                {/* Header del examen */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'start',
+                  marginBottom: '16px'
+                }}>
+                  <h3 style={{
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: colors.gray900,
+                    margin: 0
+                  }}>
+                    Examen {exam.number}
+                  </h3>
+                  
+                  {exam.completed && (
+                    <span style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      background: gradients.success,
+                      color: 'white',
+                      fontSize: '12px',
+                      fontWeight: '700'
+                    }}>
+                      ✓ Completado
+                    </span>
+                  )}
+                  
+                  {exam.isLocked && (
+                    <span style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      background: colors.gray200,
+                      color: colors.gray600,
+                      fontSize: '12px',
+                      fontWeight: '700'
+                    }}>
+                      🔒 Bloqueado
+                    </span>
+                  )}
+                </div>
+
+                {/* Info del examen */}
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{
+                    fontSize: '14px',
+                    color: colors.gray600,
+                    margin: '0 0 8px 0'
+                  }}>
+                    128 preguntas • 3 horas
+                  </p>
+                  
+                  {exam.completed && (
+                    <div>
+                      <div style={{
+                        fontSize: '32px',
+                        fontWeight: 'bold',
+                        color: exam.completed.percentage >= 70 ? colors.success : colors.error,
+                        marginBottom: '4px'
+                      }}>
+                        {exam.completed.percentage}%
+                      </div>
+                      <p style={{
+                        fontSize: '13px',
+                        color: colors.gray500,
+                        margin: 0
+                      }}>
+                        {exam.completed.score}/{exam.completed.total_questions} correctas
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botón de acción */}
+                {exam.completed ? (
+                  <button
+                    onClick={() => navigate(`/results/${exam.completed.id}`)}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: gradients.primary,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    Ver Resultados →
+                  </button>
+                ) : exam.canTake ? (
+                  <button
+                    onClick={() => navigate('/exam/complete')}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: gradients.primary,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s',
+                      boxShadow: '0 4px 12px rgba(107, 141, 214, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(107, 141, 214, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 141, 214, 0.3)'
+                    }}
+                  >
+                    🚀 Iniciar Examen
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: '12px',
+                    background: colors.gray100,
+                    borderRadius: '10px',
+                    textAlign: 'center',
+                    fontSize: '14px',
+                    color: colors.gray600,
+                    fontWeight: '600'
+                  }}>
+                    {exam.isLocked ? '🔒 Compra para desbloquear' : '⏳ No disponible'}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* BOTÓN COMPRAR cuando no tiene exámenes */}
+        {profile && profile.exams_remaining === 0 && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(232, 93, 154, 0.05) 0%, rgba(139, 111, 201, 0.05) 100%)',
+            border: `2px dashed ${colors.primary}`,
+            borderRadius: '16px',
+            padding: '32px',
+            textAlign: 'center',
+            marginBottom: '40px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎓</div>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: '700',
+              color: colors.gray900,
+              margin: '0 0 12px 0'
+            }}>
+              ¿Necesitas más exámenes?
+            </h3>
+            <p style={{
+              fontSize: '15px',
+              color: colors.gray600,
+              margin: '0 0 24px 0',
+              lineHeight: '1.6'
+            }}>
+              Adquiere 6 exámenes completos de 128 preguntas cada uno
+              <br />
+              <strong style={{ color: colors.primary }}>$150 MXN</strong> - Solo $25 MXN por examen
+            </p>
+            <button
+              onClick={() => navigate('/purchase')}
+              style={{
+                padding: '16px 32px',
+                background: gradients.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '17px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(232, 93, 154, 0.3)',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(232, 93, 154, 0.4)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(232, 93, 154, 0.3)'
+              }}
+            >
+              🛒 Comprar Exámenes
+            </button>
+          </div>
+        )}
+
+        {/* RENDIMIENTO POR MATERIA */}
         {subjectAnalysis.length > 0 && (
-          <div style={{ marginTop: '40px', marginBottom: '40px' }}>
+          <div style={{ marginBottom: '40px' }}>
             <h2 style={{
               fontSize: '24px',
               fontWeight: 'bold',
@@ -371,7 +591,6 @@ export default function StudentDashboard() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    {/* Header */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -412,7 +631,6 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    {/* Barra de progreso */}
                     <div style={{
                       width: '100%',
                       height: '12px',
@@ -430,7 +648,6 @@ export default function StudentDashboard() {
                       }} />
                     </div>
 
-                    {/* Detalles */}
                     <p style={{
                       fontSize: '14px',
                       color: colors.gray600,
@@ -442,142 +659,6 @@ export default function StudentDashboard() {
                 ))}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* HISTORIAL DE EXÁMENES */}
-        {exams.length > 0 && (
-          <div style={{ marginTop: '40px' }}>
-            <h2 style={{
-              fontSize: '24px',
-              fontWeight: 'bold',
-              marginBottom: '20px',
-              color: colors.gray900
-            }}>
-              📊 Mis Exámenes Completados
-            </h2>
-            
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {exams.map(exam => (
-                <div key={exam.id} style={{
-                  background: 'white',
-                  padding: '24px',
-                  borderRadius: '16px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '24px',
-                  transition: 'box-shadow 0.2s, transform 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ 
-                      fontSize: '18px', 
-                      fontWeight: '700', 
-                      marginBottom: '12px',
-                      color: colors.gray900
-                    }}>
-                      {exam.exam_type === 'diagnostico' 
-                        ? '🎯 Diagnóstico Gratuito' 
-                        : `📝 Examen Completo #${exam.exam_number}`}
-                    </h3>
-                    
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'baseline', 
-                      gap: '16px',
-                      marginBottom: '8px'
-                    }}>
-                      <span style={{ 
-                        fontSize: '36px', 
-                        fontWeight: 'bold', 
-                        color: exam.percentage >= 70 ? colors.success : colors.error
-                      }}>
-                        {exam.percentage}%
-                      </span>
-                      <span style={{ 
-                        fontSize: '16px',
-                        color: colors.gray600,
-                        fontWeight: '500'
-                      }}>
-                        {exam.score}/{exam.total_questions} correctas
-                      </span>
-                    </div>
-                    
-                    <p style={{ 
-                      fontSize: '13px', 
-                      color: colors.gray500, 
-                      margin: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
-                      📅 {formatDate(exam.completed_at)}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => navigate(`/results/${exam.id}`)}
-                    style={{
-                      padding: '12px 24px',
-                      background: gradients.primary,
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 2px 8px rgba(107, 141, 214, 0.3)',
-                      transition: 'transform 0.2s, box-shadow 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)'
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 141, 214, 0.4)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(107, 141, 214, 0.3)'
-                    }}
-                  >
-                    Ver Detalles →
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* MENSAJE SI NO HAY EXÁMENES */}
-        {exams.length === 0 && profile && profile.free_diagnostic_used && (
-          <div style={{
-            background: 'white',
-            padding: '40px',
-            borderRadius: '16px',
-            textAlign: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>📚</div>
-            <h3 style={{ 
-              fontSize: '20px', 
-              fontWeight: '700', 
-              color: colors.gray700,
-              marginBottom: '8px'
-            }}>
-              Aún no has completado ningún examen
-            </h3>
-            <p style={{ color: colors.gray500, fontSize: '16px' }}>
-              Tus exámenes completados aparecerán aquí
-            </p>
           </div>
         )}
 

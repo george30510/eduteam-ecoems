@@ -388,6 +388,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Botones del Header */}
+          {/* Botones del Header */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
               onClick={() => navigate('/admin/students')}
@@ -413,6 +414,33 @@ export default function AdminDashboard() {
               }}
             >
               👥 Gestionar Estudiantes
+            </button>
+
+            {/* ✅ NUEVO BOTÓN */}
+            <button
+              onClick={() => navigate('/admin/exams')}
+              style={{
+                padding: '12px 24px',
+                background: gradients.secondary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(139, 111, 201, 0.3)',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 111, 201, 0.4)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 201, 0.3)'
+              }}
+            >
+              📝 Gestión de Exámenes
             </button>
 
             <button

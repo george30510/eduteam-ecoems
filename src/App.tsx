@@ -14,6 +14,7 @@ import StudentManagement from './pages/admin/StudentManagement'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import StudentDetail from './pages/teacher/StudentDetail'
 import AdminStudentExams from './pages/admin/AdminStudentExams'
+import ExamManagement from './pages/admin/ExamManagement'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         <Route path="/admin/students" element={<StudentManagement />} />
         <Route path="/admin/student-exams/:studentId" element={<AdminStudentExams />} />
         <Route path="/admin/exam-result/:examId" element={<Results />} />
+        <Route path="/admin/exams" element={<ExamManagement />} />
         
         {/* Teacher Routes */}
         <Route path="/teacher" element={<TeacherDashboard />} />

@@ -38,6 +38,7 @@ export default function Exam() {
   const [loading, setLoading] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
+  const [examNumber, setExamNumber] = useState<number | null>(null)
 
   const isDiagnostic = type === 'diagnostic'
   const totalQuestions = isDiagnostic ? 30 : 128
@@ -66,12 +67,67 @@ export default function Exam() {
 
   const loadQuestions = async () => {
     try {
-      // Intentar cargar desde DB
-      const { data, error } = await supabase
+      // Obtener perfil del usuario
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.error('Usuario no autenticado')
+        navigate('/')
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('exams_purchased, exams_remaining')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile) {
+        console.error('Perfil no encontrado')
+        navigate('/dashboard')
+        return
+      }
+
+      let questionsQuery = supabase
         .from('question_bank')
         .select('*')
         .eq('status', 'approved')
         .eq('active', true)
+
+      if (isDiagnostic) {
+        // Para diagnóstico: preguntas con purpose 'diagnostic' o 'both'
+        questionsQuery = questionsQuery.or('purpose.eq.diagnostic,purpose.eq.both')
+        console.log('🔍 Cargando preguntas de diagnóstico')
+      } else {
+        // Para examen completo: calcular qué número de examen es
+        const completedExams = await supabase
+          .from('generated_exams')
+          .select('exam_number')
+          .eq('user_id', user.id)
+          .eq('exam_type', 'completo')
+          .eq('status', 'completed')
+
+        const completedNumbers = completedExams.data?.map(e => e.exam_number).filter(n => n !== null) || []
+        
+        // Buscar primer examen no completado del 1 al 6
+        let nextExamNumber = 1
+        for (let i = 1; i <= 6; i++) {
+          if (!completedNumbers.includes(i)) {
+            nextExamNumber = i
+            break
+          }
+        }
+
+        setExamNumber(nextExamNumber)
+        
+        // Cargar preguntas específicas del examen
+        questionsQuery = questionsQuery
+          .eq('exam_assignment', `examen_${nextExamNumber}`)
+        
+        console.log(`🔍 Cargando preguntas para Examen ${nextExamNumber}`)
+      }
+
+      // Ordenar por materia y limitar
+      const { data, error } = await questionsQuery
         .order('subject', { ascending: true })
         .limit(totalQuestions)
 
@@ -79,10 +135,10 @@ export default function Exam() {
 
       // Si hay suficientes preguntas, usarlas; si no, generar mock
       if (data && data.length >= totalQuestions) {
-        console.log(`Loaded ${data.length} questions from database`)
+        console.log(`✅ Loaded ${data.length} questions from database`)
         setQuestions(data)
       } else {
-        console.log(`Only ${data?.length || 0} in DB, generating mock`)
+        console.log(`⚠️ Only ${data?.length || 0} in DB, generating mock`)
         const mockQuestions = generateMockQuestions(totalQuestions)
         setQuestions(mockQuestions)
       }
@@ -141,172 +197,168 @@ export default function Exam() {
   }
 
   const handleFinish = async () => {
-  console.log('🏁 ===================================')
-  console.log('🏁 INICIANDO FINALIZACIÓN DE EXAMEN')
-  console.log('🏁 ===================================')
-  
-  let correct = 0
-  const answersArray: any[] = []
-
-  questions.forEach((q, index) => {
-    const studentAnswer = answers[index] ?? null
-    const isCorrect = studentAnswer === q.correct_option
-
-    if (isCorrect) correct++
-
-    answersArray.push({
-      question_id: q.id,
-      question_number: index + 1,
-      question_text: q.question_text,
-      subject: q.subject || 'Sin clasificar', // ✅ AGREGADO
-      student_answer: studentAnswer,
-      correct_answer: q.correct_option,
-      is_correct: isCorrect,
-      option_a: q.option_a,
-      option_b: q.option_b,
-      option_c: q.option_c,
-      option_d: q.option_d
-    })
-  })
-
-  const percentage = Math.round((correct / questions.length) * 100)
-  const timeTaken = (totalMinutes * 60) - timeLeft
-  const avgTimePerQuestion = Math.floor(timeTaken / questions.length)
-
-  console.log('📊 Resultados:')
-  console.log('   ✓ Correctas:', correct)
-  console.log('   ✗ Incorrectas:', questions.length - correct - (questions.length - Object.keys(answers).length))
-  console.log('   ⊘ Sin responder:', questions.length - Object.keys(answers).length)
-  console.log('   % Porcentaje:', percentage)
-  console.log('   ⏱ Tiempo:', `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`)
-
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Usuario no autenticado')
-
-    console.log('👤 Usuario ID:', user.id)
-
-    // ✅ MAPEAR exam_type de inglés a español
-    const examTypeForDB = type === 'diagnostic' ? 'diagnostico' : 'completo'
+    console.log('🏁 ===================================')
+    console.log('🏁 INICIANDO FINALIZACIÓN DE EXAMEN')
+    console.log('🏁 ===================================')
     
-    console.log('💾 Insertando examen...')
-    console.log('   Type URL:', type)
-    console.log('   Type DB:', examTypeForDB)
+    let correct = 0
+    const answersArray: any[] = []
 
-    const { data: examData, error: examError } = await supabase
-      .from('generated_exams')
-      .insert({
-        user_id: user.id,
-        exam_type: examTypeForDB, // ✅ CORREGIDO: 'diagnostico' o 'completo'
-        exam_number: null,
-        questions_order: questions.map(q => q.id),
-        started_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        time_taken_seconds: timeTaken,
-        score: correct,
-        total_questions: questions.length,
-        percentage,
-        status: 'completed', // ✅ VÁLIDO según tu schema
-        questions_data: answersArray // ✅ Snapshot completo
+    questions.forEach((q, index) => {
+      const studentAnswer = answers[index] ?? null
+      const isCorrect = studentAnswer === q.correct_option
+
+      if (isCorrect) correct++
+
+      answersArray.push({
+        question_id: q.id,
+        question_number: index + 1,
+        question_text: q.question_text,
+        subject: q.subject || 'Sin clasificar',
+        student_answer: studentAnswer,
+        correct_answer: q.correct_option,
+        is_correct: isCorrect,
+        option_a: q.option_a,
+        option_b: q.option_b,
+        option_c: q.option_c,
+        option_d: q.option_d
       })
-      .select()
-      .single()
+    })
 
-    if (examError) {
-      console.error('❌ Error insertando examen:')
-      console.error('   Código:', examError.code)
-      console.error('   Mensaje:', examError.message)
-      console.error('   Detalle:', examError.details)
-      console.error('   Hint:', examError.hint)
-      throw examError
-    }
+    const percentage = Math.round((correct / questions.length) * 100)
+    const timeTaken = (totalMinutes * 60) - timeLeft
+    const avgTimePerQuestion = Math.floor(timeTaken / questions.length)
 
-    console.log('✅ Examen guardado, ID:', examData.id)
+    console.log('📊 Resultados:')
+    console.log('   ✓ Correctas:', correct)
+    console.log('   ✗ Incorrectas:', questions.length - correct - (questions.length - Object.keys(answers).length))
+    console.log('   ⊘ Sin responder:', questions.length - Object.keys(answers).length)
+    console.log('   % Porcentaje:', percentage)
+    console.log('   ⏱ Tiempo:', `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`)
 
-    // ✅ Insertar respuestas individuales
-    console.log('💾 Insertando respuestas...')
-    
-    const answersToInsert = answersArray
-      .filter(a => !a.question_id.startsWith('mock-')) // Solo reales
-      .filter(a => a.student_answer !== null) // Solo respondidas
-      .map(a => ({
-        exam_id: examData.id,
-        student_id: user.id,
-        question_id: a.question_id,
-        question_number: a.question_number,
-        subject: a.subject, // ✅ AGREGADO
-        student_answer: a.student_answer,
-        correct_answer: a.correct_answer,
-        is_correct: a.is_correct,
-        time_spent_seconds: avgTimePerQuestion, // ✅ Promedio por ahora
-        answered_at: new Date().toISOString()
-      }))
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Usuario no autenticado')
 
-    console.log(`📝 Total a insertar: ${answersToInsert.length} respuestas`)
-    if (answersToInsert.length > 0) {
-      console.log('📝 Muestra primera:')
-      console.log(JSON.stringify(answersToInsert[0], null, 2))
-    }
+      console.log('👤 Usuario ID:', user.id)
 
-    if (answersToInsert.length > 0) {
-      const { error: answersError } = await supabase
-        .from('student_answers')
-        .insert(answersToInsert)
+      // Mapear exam_type de inglés a español
+      const examTypeForDB = type === 'diagnostic' ? 'diagnostico' : 'completo'
+      
+      console.log('💾 Insertando examen...')
+      console.log('   Type URL:', type)
+      console.log('   Type DB:', examTypeForDB)
+      console.log('   Exam Number:', examNumber)
 
-      if (answersError) {
-        console.error('❌ Error insertando respuestas:', answersError)
-        console.warn('⚠️ Continuando (datos en questions_data)')
-      } else {
-        console.log('✅ Respuestas guardadas')
-      }
-    }
-
-    // ✅ Actualizar contadores
-    if (type === 'complete') {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('exams_remaining')
-        .eq('id', user.id)
+      const { data: examData, error: examError } = await supabase
+        .from('generated_exams')
+        .insert({
+          user_id: user.id,
+          exam_type: examTypeForDB,
+          exam_number: isDiagnostic ? null : examNumber, // ✅ AGREGADO: número de examen
+          questions_order: questions.map(q => q.id),
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          time_taken_seconds: timeTaken,
+          score: correct,
+          total_questions: questions.length,
+          percentage,
+          status: 'completed',
+          questions_data: answersArray
+        })
+        .select()
         .single()
 
-      if (profile?.exams_remaining > 0) {
+      if (examError) {
+        console.error('❌ Error insertando examen:')
+        console.error('   Código:', examError.code)
+        console.error('   Mensaje:', examError.message)
+        console.error('   Detalle:', examError.details)
+        console.error('   Hint:', examError.hint)
+        throw examError
+      }
+
+      console.log('✅ Examen guardado, ID:', examData.id)
+
+      // Insertar respuestas individuales
+      console.log('💾 Insertando respuestas...')
+      
+      const answersToInsert = answersArray
+        .filter(a => !a.question_id.startsWith('mock-'))
+        .filter(a => a.student_answer !== null)
+        .map(a => ({
+          exam_id: examData.id,
+          student_id: user.id,
+          question_id: a.question_id,
+          question_number: a.question_number,
+          subject: a.subject,
+          student_answer: a.student_answer,
+          correct_answer: a.correct_answer,
+          is_correct: a.is_correct,
+          time_spent_seconds: avgTimePerQuestion,
+          answered_at: new Date().toISOString()
+        }))
+
+      console.log(`📝 Total a insertar: ${answersToInsert.length} respuestas`)
+
+      if (answersToInsert.length > 0) {
+        const { error: answersError } = await supabase
+          .from('student_answers')
+          .insert(answersToInsert)
+
+        if (answersError) {
+          console.error('❌ Error insertando respuestas:', answersError)
+          console.warn('⚠️ Continuando (datos en questions_data)')
+        } else {
+          console.log('✅ Respuestas guardadas')
+        }
+      }
+
+      // Actualizar contadores
+      if (type === 'complete') {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('exams_remaining')
+          .eq('id', user.id)
+          .single()
+
+        if (profile?.exams_remaining > 0) {
+          await supabase
+            .from('user_profiles')
+            .update({ exams_remaining: profile.exams_remaining - 1 })
+            .eq('id', user.id)
+          console.log('✅ Contador actualizado')
+        }
+      }
+
+      if (type === 'diagnostic') {
         await supabase
           .from('user_profiles')
-          .update({ exams_remaining: profile.exams_remaining - 1 })
+          .update({ free_diagnostic_used: true })
           .eq('id', user.id)
-        console.log('✅ Contador actualizado')
+        console.log('✅ Diagnóstico marcado')
       }
+
+      console.log('🎉 EXAMEN COMPLETADO EXITOSAMENTE')
+      
+      navigate(`/results/${examData.id}`)
+
+    } catch (error: any) {
+      console.error('💥 ERROR CRÍTICO:', error)
+      console.error('💥 Mensaje:', error?.message)
+      console.error('💥 Detalles:', error?.details)
+      console.error('💥 Hint:', error?.hint)
+      console.error('💥 Code:', error?.code)
+
+      alert(
+        'Error al guardar el examen:\n\n' +
+        `${error?.message}\n\n` +
+        'Revisa la consola (F12) para más detalles.'
+      )
+      
+      return
     }
-
-    if (type === 'diagnostic') {
-      await supabase
-        .from('user_profiles')
-        .update({ free_diagnostic_used: true })
-        .eq('id', user.id)
-      console.log('✅ Diagnóstico marcado')
-    }
-
-    console.log('🎉 EXAMEN COMPLETADO EXITOSAMENTE')
-    
-    navigate(`/results/${examData.id}`)
-
-  } catch (error: any) {
-    console.error('💥 ERROR CRÍTICO:', error)
-    console.error('💥 Mensaje:', error?.message)
-    console.error('💥 Detalles:', error?.details)
-    console.error('💥 Hint:', error?.hint)
-    console.error('💥 Code:', error?.code)
-
-    alert(
-      'Error al guardar el examen:\n\n' +
-      `${error?.message}\n\n` +
-      'Revisa la consola (F12) para más detalles.'
-    )
-    
-    // NO navegar si falló
-    return
   }
-}
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)
@@ -392,7 +444,7 @@ export default function Exam() {
               margin: '0 0 12px 0',
               color: colors.gray900
             }}>
-              {isDiagnostic ? 'Examen Diagnóstico' : 'Examen Completo ECOEMS'}
+              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} COMIPEMS`}
             </h1>
             <p style={{
               fontSize: '18px',
@@ -538,7 +590,7 @@ export default function Exam() {
               margin: 0,
               color: colors.gray900
             }}>
-              {isDiagnostic ? 'Examen Diagnóstico' : 'Examen Completo'}
+              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} COMIPEMS`}
             </h1>
             <p style={{
               fontSize: '14px',
