@@ -26,6 +26,7 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState<any>(null)
   const [profileMissing, setProfileMissing] = useState(false)
   const [exams, setExams] = useState<ExamHistory[]>([])
+  const [assignedExams, setAssignedExams] = useState<any[]>([])
   const [subjectAnalysis, setSubjectAnalysis] = useState<SubjectAnalysis[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -65,6 +66,7 @@ export default function StudentDashboard() {
     setProfile(profileData)
     setProfileMissing(false)
     await loadExams(user.id)
+    await loadAssignedExams(user.id)
     await loadSubjectAnalysis(user.id)
     setLoading(false)
   }
@@ -81,6 +83,19 @@ export default function StudentDashboard() {
       setExams(data || [])
     } catch (error) {
       console.error('Error loading exams:', error)
+    }
+  }
+
+  const loadAssignedExams = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('exam_assignments')
+        .select('*')
+        .eq('user_id', userId)
+
+      setAssignedExams(data || [])
+    } catch (error) {
+      console.error('Error loading assigned exams:', error)
     }
   }
 
@@ -146,12 +161,18 @@ export default function StudentDashboard() {
   const getAvailableExams = () => {
     const examsPurchased = profile?.exams_purchased || 0
     const examsRemaining = profile?.exams_remaining || 0
+    // Considerar disponible si tiene exams_remaining > 0 O exams_purchased > 0
+    const hasAccess = examsRemaining > 0 || examsPurchased > 0 || assignedExams.length > 0
     
     return Array.from({ length: 6 }, (_, i) => {
       const examNumber = i + 1
       const completed = exams.find(e => e.exam_type === 'completo' && e.exam_number === examNumber)
-      const canTake = examNumber <= examsPurchased && examsRemaining > 0
-      const isLocked = examNumber > examsPurchased
+      // Puede hacer el examen si tiene acceso Y está en sus asignaciones
+      const isAssigned = assignedExams.some(e => 
+        e.exam_type === `monthly_${examNumber}` || e.exam_type === `exam_${examNumber}`
+      )
+      const canTake = (isAssigned || examNumber <= examsPurchased) && (examsRemaining > 0 || examsPurchased > 0)
+      const isLocked = !isAssigned && examNumber > examsPurchased
       
       return {
         number: examNumber,
