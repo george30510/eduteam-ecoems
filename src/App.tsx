@@ -9,12 +9,13 @@ import AdminPanel from './pages/admin/AdminPanel'
 import Register from './pages/Register'
 import Purchase from './pages/Purchase'
 import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
+// import ResetPassword from './pages/reset-password'
 import StudentManagement from './pages/admin/StudentManagement'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import StudentDetail from './pages/teacher/StudentDetail'
 import AdminStudentExams from './pages/admin/AdminStudentExams'
 import ExamManagement from './pages/admin/ExamManagement'
+import CreateUser from './pages/admin/CreateUser';
 
 function App() {
   return (
@@ -23,7 +24,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        {/* <Route path="/reset-password" element={<ResetPassword />} /> */}
         <Route path="/purchase" element={<Purchase />} />
         
         {/* Student Routes */}
@@ -39,6 +40,7 @@ function App() {
         <Route path="/admin/student-exams/:studentId" element={<AdminStudentExams />} />
         <Route path="/admin/exam-result/:examId" element={<Results />} />
         <Route path="/admin/exams" element={<ExamManagement />} />
+        <Route path="/admin/users/create" element={<CreateUser />} />
         
         {/* Teacher Routes */}
         <Route path="/teacher" element={<TeacherDashboard />} />
