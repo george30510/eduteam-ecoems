@@ -121,7 +121,7 @@ export default function Exam() {
         
         // Cargar preguntas específicas del examen
         questionsQuery = questionsQuery
-          .eq('exam_assignment', `examen_${nextExamNumber}`)
+          .eq('exam_assignment', `exam_${nextExamNumber}`)
         
         console.log(`🔍 Cargando preguntas para Examen ${nextExamNumber}`)
       }
