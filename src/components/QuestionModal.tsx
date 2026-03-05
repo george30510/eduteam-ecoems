@@ -30,6 +30,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
     subtopic: '',
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
     purpose: 'both' as 'diagnostic' | 'exam' | 'both',
+    exam_assignment: 'exam_1' as string,
     question_text: '',
     question_equation: '',
     question_image: '',
@@ -57,6 +58,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
         subtopic: editingQuestion.subtopic || '',
         difficulty: editingQuestion.difficulty || 'medium',
         purpose: editingQuestion.purpose || 'both',
+        exam_assignment: editingQuestion.exam_assignment || 'exam_1',
         question_text: editingQuestion.question_text || '',
         question_equation: editingQuestion.question_equation || '',
         question_image: editingQuestion.question_image || '',
@@ -77,6 +79,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
         subtopic: '',
         difficulty: 'medium',
         purpose: 'both',
+        exam_assignment: 'exam_1',
         question_text: '',
         question_equation: '',
         question_image: '',
@@ -148,17 +151,20 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
       setError('Selecciona una materia')
       return
     }
-    if (!formData.topic) {
+    // topic solo obligatorio si no es reactivo de imagen
+    if (!formData.topic && !formData.question_image && !imageFile) {
       setError('Ingresa un tema')
       return
     }
-    if (!formData.question_text) {
-      setError('Ingresa el texto de la pregunta')
+    if (!formData.question_text && !formData.question_image && !imageFile) {
+      setError('Ingresa el texto de la pregunta o sube una imagen')
       return
     }
-    if (!formData.option_a || !formData.option_b || !formData.option_c || !formData.option_d) {
-      setError('Completa todas las opciones')
-      return
+    if (!formData.question_image && !imageFile) {
+      if (!formData.option_a || !formData.option_b || !formData.option_c || !formData.option_d) {
+        setError('Completa todas las opciones')
+        return
+      }
     }
 
     setSaving(true)
@@ -174,13 +180,21 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
         }
       }
 
+      // Si es reactivo de imagen, auto-rellenar opciones con letras
+      const isImageQuestion = imageUrl || formData.question_image
       const dataToSave = {
         ...formData,
+        question_text: formData.question_text || (isImageQuestion ? '.' : ''),
+        topic: formData.topic || (isImageQuestion ? 'RETO' : ''),
         question_image: imageUrl || null,
         question_equation: formData.question_equation || null,
         subtopic: formData.subtopic || null,
         explanation_text: formData.explanation_text || null,
         explanation_equation: formData.explanation_equation || null,
+        option_a: formData.option_a || (isImageQuestion ? 'A' : ''),
+        option_b: formData.option_b || (isImageQuestion ? 'B' : ''),
+        option_c: formData.option_c || (isImageQuestion ? 'C' : ''),
+        option_d: formData.option_d || (isImageQuestion ? 'D' : ''),
       }
 
       if (editingQuestion) {
@@ -370,11 +384,11 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                   color: colors.gray700,
                   fontSize: '14px'
                 }}>
-                  Propósito *
+                  Asignar a *
                 </label>
                 <select
-                  value={formData.purpose}
-                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value as any })}
+                  value={formData.exam_assignment}
+                  onChange={(e) => setFormData({ ...formData, exam_assignment: e.target.value })}
                   style={{
                     width: '100%',
                     padding: '14px',
@@ -385,9 +399,13 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="diagnostic">Diagnóstico</option>
-                  <option value="exam">Examen</option>
-                  <option value="both">Ambos</option>
+                  <option value="diagnostic">📋 Diagnóstico</option>
+                  <option value="exam_1">📝 Examen 1</option>
+                  <option value="exam_2">📝 Examen 2</option>
+                  <option value="exam_3">📝 Examen 3</option>
+                  <option value="exam_4">📝 Examen 4</option>
+                  <option value="exam_5">📝 Examen 5</option>
+                  <option value="exam_6">📝 Examen 6</option>
                 </select>
               </div>
             </div>
@@ -903,7 +921,15 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                   alt="Imagen pregunta"
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement
-                    target.src = 'https://via.placeholder.com/400x300?text=Error+cargando+imagen'
+                    target.style.display = 'none'
+                    const parent = target.parentElement
+                    if (parent && !parent.querySelector('.img-error-msg')) {
+                      const msg = document.createElement('div')
+                      msg.className = 'img-error-msg'
+                      msg.style.cssText = 'padding:16px;background:#FEF3C7;border:2px solid #F59E0B;border-radius:8px;color:#92400E;font-size:14px;font-weight:600;margin-bottom:20px;'
+                      msg.textContent = '⚠️ No se pudo cargar la imagen. La URL puede ser incorrecta o el archivo no existe en Storage.'
+                      parent.insertBefore(msg, target.nextSibling)
+                    }
                   }}
                   style={{
                     maxWidth: '100%',

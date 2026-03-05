@@ -57,6 +57,7 @@ export default function QuestionBank() {
   const [filterSubject, setFilterSubject] = useState<string>('all')
   const [filterDifficulty, setFilterDifficulty] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterExam, setFilterExam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
@@ -200,10 +201,11 @@ export default function QuestionBank() {
     const matchSubject = filterSubject === 'all' || q.subject === filterSubject
     const matchDifficulty = filterDifficulty === 'all' || q.difficulty === filterDifficulty
     const matchStatus = filterStatus === 'all' || q.status === filterStatus
+    const matchExam = filterExam === 'all' || (q as any).exam_assignment === filterExam
     const matchSearch = q.question_text.toLowerCase().includes(searchTerm.toLowerCase()) ||
                        q.topic.toLowerCase().includes(searchTerm.toLowerCase())
     
-    return matchSubject && matchDifficulty && matchStatus && matchSearch
+    return matchSubject && matchDifficulty && matchStatus && matchExam && matchSearch
   })
 
   const stats = {
@@ -483,6 +485,28 @@ export default function QuestionBank() {
               <option value="approved">✅ Aprobadas</option>
               <option value="rejected">❌ Rechazadas</option>
             </select>
+
+            <select
+              value={filterExam}
+              onChange={(e) => setFilterExam(e.target.value)}
+              style={{
+                padding: '12px',
+                border: `2px solid ${colors.gray200}`,
+                borderRadius: '10px',
+                fontSize: '15px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">Todos los exámenes</option>
+              <option value="diagnostic">📋 Diagnóstico</option>
+              <option value="exam_1">📝 Examen 1</option>
+              <option value="exam_2">📝 Examen 2</option>
+              <option value="exam_3">📝 Examen 3</option>
+              <option value="exam_4">📝 Examen 4</option>
+              <option value="exam_5">📝 Examen 5</option>
+              <option value="exam_6">📝 Examen 6</option>
+            </select>
           </div>
 
           <input
@@ -622,6 +646,20 @@ export default function QuestionBank() {
                             Por: {question.creator_name}
                           </span>
 
+                          {(question as any).exam_assignment && (
+                            <span style={{
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              background: 'linear-gradient(135deg, #6B8DD6 0%, #34B7C8 100%)',
+                              color: 'white'
+                            }}>
+                              {(question as any).exam_assignment === 'diagnostic' ? '📋 Diagnóstico' :
+                               `📝 ${(question as any).exam_assignment.replace('exam_', 'Examen ')}`}
+                            </span>
+                          )}
+
                           {question.approved_by && (
                             <span style={{
                               fontSize: '12px',
@@ -642,6 +680,26 @@ export default function QuestionBank() {
                         }}>
                           {question.question_text}
                         </p>
+
+                        {(question as any).question_image && (
+                          <img
+                            src={(question as any).question_image}
+                            alt="Imagen del reactivo"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement
+                              target.style.display = 'none'
+                            }}
+                            style={{
+                              maxWidth: '320px',
+                              maxHeight: '200px',
+                              objectFit: 'contain',
+                              borderRadius: '8px',
+                              border: `2px solid ${colors.gray200}`,
+                              marginBottom: '12px',
+                              display: 'block'
+                            }}
+                          />
+                        )}
 
                         <div style={{
                           display: 'grid',

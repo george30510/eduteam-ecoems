@@ -96,7 +96,7 @@ export default function ExamManagement() {
         if (!q.exam_assignment) return
         
         // Extraer número del formato "examen_1", "examen_2", etc
-        const match = q.exam_assignment.match(/examen_(\d+)/)
+        const match = q.exam_assignment.match(/exam_(\d+)/)
         if (!match) return
         
         const examNum = parseInt(match[1])
@@ -126,7 +126,14 @@ export default function ExamManagement() {
   }
 
   const handleEditExam = (exam: ExamConfig) => {
-    setEditingExam({ ...exam })
+    // Normalizar fecha a YYYY-MM-DD para el input type="date"
+    const normalizedExam = {
+      ...exam,
+      available_from: exam.available_from
+        ? exam.available_from.split('T')[0]
+        : ''
+    }
+    setEditingExam(normalizedExam)
     setShowEditModal(true)
   }
 
@@ -157,13 +164,15 @@ export default function ExamManagement() {
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('es-MX', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-  }
+  // Forzar interpretación como fecha local, no UTC
+  const [year, month, day] = dateString.split('T')[0].split('-')
+  const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+  return date.toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+}
 
   const isDatePassed = (dateString: string) => {
     const examDate = new Date(dateString)
