@@ -152,7 +152,22 @@ export default function StudentDashboard() {
     return date.toLocaleDateString('es-MX', options)
   }
 
+  const DEMO_USER_ID = 'b7a9d4e5-231a-43db-a0de-c902ebac8f68'
+
   const handleLogout = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (session?.user?.id === DEMO_USER_ID) {
+      // Limpiar todos los datos del usuario demo antes de cerrar sesión
+      await supabase.from('student_answers').delete().eq('student_id', DEMO_USER_ID)
+      await supabase.from('results').delete().eq('user_id', DEMO_USER_ID)
+      await supabase.from('generated_exams').delete().eq('user_id', DEMO_USER_ID)
+      await supabase
+        .from('exam_assignments')
+        .update({ completed: false, score: null })
+        .eq('user_id', DEMO_USER_ID)
+    }
+
     await supabase.auth.signOut()
     navigate('/')
   }
