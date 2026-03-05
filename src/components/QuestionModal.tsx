@@ -627,7 +627,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, editingQuestion
                     alt="Preview"
                     onError={(e) => {
                       const target = e.currentTarget as HTMLImageElement
-                      target.src = 'https://via.placeholder.com/400x300?text=Error+cargando+imagen'
+                       target.style.display = 'none'
                     }}
                     style={{
                       maxWidth: '100%',
