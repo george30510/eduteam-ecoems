@@ -107,18 +107,27 @@ export default function StudentManagement() {
     try {
       setCreatingStudent(true)
 
-      const { data, error } = await supabase.rpc('create_student_account', {
-        p_full_name: newStudent.full_name,
-        p_email: newStudent.email.toLowerCase(),
-        p_school: newStudent.school || null,
-        p_grade: newStudent.grade || null,
-        p_phone: newStudent.phone || null
-      })
+      const { data: { session } } = await supabase.auth.getSession()
 
-      if (error) {
-        console.error('Error RPC:', error)
-        throw new Error(error.message)
-      }
+      const response = await fetch(
+        'https://sthbucwmyzuzrtknxthn.supabase.co/functions/v1/create-student',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            full_name: newStudent.full_name,
+            email: newStudent.email.toLowerCase(),
+            school: newStudent.school || null,
+            grade: newStudent.grade || null,
+            phone: newStudent.phone || null
+          })
+        }
+      )
+
+      const data = await response.json()
 
       if (!data || !data.success) {
         throw new Error(data?.error || 'Error al crear estudiante')
