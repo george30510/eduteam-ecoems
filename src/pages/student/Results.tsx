@@ -109,12 +109,12 @@ export default function Results() {
         if (questionIds.length > 0) {
           const { data: questionsData } = await supabase
             .from('question_bank')
-            .select('id, explanation_text')
+            .select('id, explanation_text, question_image')
             .in('id', questionIds)
 
           if (questionsData) {
             explanations = questionsData.reduce((acc: any, q: any) => {
-              acc[q.id] = q.explanation_text
+              acc[q.id] = { explanation_text: q.explanation_text, question_image: q.question_image }
               return acc
             }, {})
           }
@@ -123,7 +123,8 @@ export default function Results() {
         // Combinar datos
         const answersWithExplanations = exam.questions_data.map((a: any) => ({
           ...a,
-          explanation_text: explanations[a.question_id] || null
+          explanation_text: explanations[a.question_id]?.explanation_text || null,
+          question_image: explanations[a.question_id]?.question_image || null
         }))
 
         setAnswers(answersWithExplanations)
