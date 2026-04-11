@@ -15,6 +15,7 @@ interface Answer {
   option_c: string
   option_d: string
   explanation_text?: string
+  question_image?: string | null
 }
 
 interface ExamData {
@@ -522,6 +523,23 @@ export default function Results() {
                   }}>
                     {answer.question_text}
                   </h3>
+
+                  {answer.question_image && (
+                    <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                      <img
+                        src={answer.question_image}
+                        alt="Imagen del reactivo"
+                        onError={(e) => { e.currentTarget.style.display = 'none' }}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '350px',
+                          objectFit: 'contain',
+                          borderRadius: '12px',
+                          border: `2px solid ${colors.gray200}`
+                        }}
+                      />
+                    </div>
+                  )}
 
                   {/* Opciones */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
