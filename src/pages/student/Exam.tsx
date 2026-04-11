@@ -12,6 +12,7 @@ interface Question {
   option_c: string
   option_d: string
   correct_option: string
+  question_image: string | null
 }
 
 const SUBJECTS = [
@@ -168,7 +169,8 @@ export default function Exam() {
           option_b: 'Opción B - Segunda alternativa de respuesta',
           option_c: 'Opción C - Tercera alternativa de respuesta',
           option_d: 'Opción D - Cuarta alternativa de respuesta',
-          correct_option: ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)]
+          correct_option: ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)],
+          question_image: null 
         })
       }
     })
@@ -444,7 +446,7 @@ export default function Exam() {
               margin: '0 0 12px 0',
               color: colors.gray900
             }}>
-              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} COMIPEMS`}
+              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} ECOEMS`}
             </h1>
             <p style={{
               fontSize: '18px',
@@ -590,7 +592,7 @@ export default function Exam() {
               margin: 0,
               color: colors.gray900
             }}>
-              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} COMIPEMS`}
+              {isDiagnostic ? 'Examen Diagnóstico' : `Examen ${examNumber} ECOEMS`}
             </h1>
             <p style={{
               fontSize: '14px',
@@ -671,11 +673,28 @@ export default function Exam() {
             fontSize: '22px',
             fontWeight: '600',
             color: colors.gray900,
-            margin: '0 0 32px 0',
+            margin: '0 0 20px 0',
             lineHeight: '1.6'
           }}>
             {question.question_text}
           </h2>
+
+          {question.question_image && (
+            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+              <img
+                src={question.question_image}
+                alt="Imagen del reactivo"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '400px',
+                  objectFit: 'contain',
+                  borderRadius: '12px',
+                  border: `2px solid ${colors.gray200}`
+                }}
+              />
+            </div>
+          )}
 
           <div style={{
             display: 'grid',
