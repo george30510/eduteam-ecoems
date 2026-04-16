@@ -908,14 +908,14 @@ export default function Exam() {
       {/* Tablero Panorámico - Botón Flotante */}
       <div style={{
         position: 'fixed',
-        bottom: '30px',
-        right: '30px',
+        bottom: '90px',
+        right: '20px',
         zIndex: 100
       }}>
         <button
           onClick={() => setShowOverview(!showOverview)}
           style={{
-            padding: '16px 24px',
+            padding: '12px 18px',
             borderRadius: '16px',
             background: gradients.primary,
             color: 'white',
@@ -924,11 +924,11 @@ export default function Exam() {
             boxShadow: '0 8px 24px rgba(232, 93, 154, 0.4)',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
-            fontSize: '16px',
+            gap: '10px',
+            fontSize: '14px',
             fontWeight: '700',
             transition: 'all 0.3s',
-            minWidth: '200px',
+            minWidth: '160px',
             justifyContent: 'center'
           }}
           onMouseOver={(e) => {
@@ -940,12 +940,12 @@ export default function Exam() {
             e.currentTarget.style.boxShadow = '0 8px 24px rgba(232, 93, 154, 0.4)'
           }}
         >
-          <span style={{ fontSize: '24px' }}>🗂️</span>
+          <span style={{ fontSize: '20px' }}>🗂️</span>
           <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '16px', fontWeight: '700' }}>
+            <div style={{ fontSize: '14px', fontWeight: '700' }}>
               Ver Todas
             </div>
-            <div style={{ fontSize: '12px', opacity: 0.9, fontWeight: '500' }}>
+            <div style={{ fontSize: '11px', opacity: 0.9, fontWeight: '500' }}>
               {answeredCount}/{questions.length} respondidas
             </div>
           </div>
