@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { colors, gradients } from '../../styles/theme'
@@ -40,6 +40,8 @@ export default function Exam() {
   const [examStarted, setExamStarted] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [examNumber, setExamNumber] = useState<number | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const examProgressKey = useRef<string>(`exam_progress_${type}`)
 
   const isDiagnostic = type === 'diagnostic'
   const totalQuestions = isDiagnostic ? 30 : 128
@@ -48,6 +50,20 @@ export default function Exam() {
   useEffect(() => {
     loadQuestions()
   }, [type])
+
+  // Renovar sesión automáticamente cada 45 minutos
+  useEffect(() => {
+    const refreshInterval = setInterval(async () => {
+      const { error } = await supabase.auth.refreshSession()
+      if (error) {
+        console.warn('⚠️ No se pudo renovar la sesión:', error.message)
+      } else {
+        console.log('🔄 Sesión renovada automáticamente')
+      }
+    }, 45 * 60 * 1000) // cada 45 minutos
+
+    return () => clearInterval(refreshInterval)
+  }, [])
 
   useEffect(() => {
     if (examStarted && timeLeft > 0) {
@@ -75,6 +91,8 @@ export default function Exam() {
         navigate('/')
         return
       }
+
+      setUserId(user.id)
 
       const { data: profile } = await supabase
         .from('user_profiles')
@@ -180,10 +198,35 @@ export default function Exam() {
   }
 
   const handleAnswer = (option: string) => {
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestion]: option
-    }))
+    const newAnswers = { ...answers, [currentQuestion]: option }
+    setAnswers(newAnswers)
+
+    // Auto-save en localStorage (instantáneo, sin depender de red)
+    try {
+      localStorage.setItem(examProgressKey.current, JSON.stringify({
+        answers: newAnswers,
+        currentQuestion,
+        timeLeft,
+        examNumber,
+        savedAt: Date.now()
+      }))
+    } catch (e) {
+      console.warn('No se pudo guardar en localStorage:', e)
+    }
+
+    // Auto-save en Supabase (asíncrono, no bloquea)
+    if (userId && questions[currentQuestion]) {
+      const q = questions[currentQuestion]
+      supabase.from('exam_progress').upsert({
+        user_id: userId,
+        question_index: currentQuestion,
+        question_id: q.id,
+        selected_answer: option,
+        saved_at: new Date().toISOString()
+      }, { onConflict: 'user_id,question_id' }).then(({ error }) => {
+        if (error) console.warn('Auto-save Supabase:', error.message)
+      })
+    }
   }
 
   const handleNext = () => {
@@ -342,6 +385,15 @@ export default function Exam() {
       }
 
       console.log('🎉 EXAMEN COMPLETADO EXITOSAMENTE')
+
+      // Limpiar progreso guardado
+      localStorage.removeItem(examProgressKey.current)
+      if (userId) {
+        supabase.from('exam_progress')
+          .delete()
+          .eq('user_id', userId)
+          .then(() => console.log('🧹 Progreso temporal limpiado'))
+      }
       
       navigate(`/results/${examData.id}`)
 
@@ -539,7 +591,26 @@ export default function Exam() {
               Cancelar
             </button>
             <button
-              onClick={() => setExamStarted(true)}
+              onClick={() => {
+                // Intentar restaurar progreso guardado
+                try {
+                  const saved = localStorage.getItem(examProgressKey.current)
+                  if (saved) {
+                    const progress = JSON.parse(saved)
+                    const ageMinutes = (Date.now() - progress.savedAt) / 60000
+                    // Solo restaurar si tiene menos de 4 horas
+                    if (ageMinutes < 240 && progress.answers && Object.keys(progress.answers).length > 0) {
+                      setAnswers(progress.answers)
+                      setCurrentQuestion(progress.currentQuestion || 0)
+                      if (progress.timeLeft > 0) setTimeLeft(progress.timeLeft)
+                      console.log(`♻️ Progreso restaurado: ${Object.keys(progress.answers).length} respuestas`)
+                    }
+                  }
+                } catch (e) {
+                  console.warn('No se pudo restaurar progreso:', e)
+                }
+                setExamStarted(true)
+              }}
               style={{
                 padding: '16px 32px',
                 border: 'none',
