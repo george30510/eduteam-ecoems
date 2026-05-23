@@ -138,11 +138,18 @@ export default function Exam() {
 
         setExamNumber(nextExamNumber)
         
+        // Mapeo de examen → banco de reactivos
+        // Examen 3 reutiliza los mismos reactivos del Examen 2
+        const examBankMap: Record<number, number> = {
+          3: 2,
+        }
+        const bankNumber = examBankMap[nextExamNumber] ?? nextExamNumber
+        
         // Cargar preguntas específicas del examen
         questionsQuery = questionsQuery
-          .eq('exam_assignment', `exam_${nextExamNumber}`)
+          .eq('exam_assignment', `exam_${bankNumber}`)
         
-        console.log(`🔍 Cargando preguntas para Examen ${nextExamNumber}`)
+        console.log(`🔍 Cargando preguntas para Examen ${nextExamNumber} (banco: exam_${bankNumber})`)
       }
 
       // Ordenar por materia y limitar

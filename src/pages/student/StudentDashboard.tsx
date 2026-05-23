@@ -186,8 +186,9 @@ export default function StudentDashboard() {
       const isAssigned = assignedExams.some(e => 
         e.exam_type === `monthly_${examNumber}` || e.exam_type === `exam_${examNumber}`
       )
-      const canTake = (isAssigned || examNumber <= examsPurchased) && (examsRemaining > 0 || examsPurchased > 0)
-      const isLocked = !isAssigned && examNumber > examsPurchased
+      // Puede iniciar el examen solo si tiene asignación explícita Y intentos restantes
+      const canTake = isAssigned && examsRemaining > 0
+      const isLocked = !isAssigned
       
       return {
         number: examNumber,
@@ -373,7 +374,7 @@ export default function StudentDashboard() {
             marginBottom: '20px',
             color: colors.gray900
           }}>
-            📝 Exámenes COMIPEMS
+            📝 Exámenes ECOEMS
           </h2>
 
           <div style={{
