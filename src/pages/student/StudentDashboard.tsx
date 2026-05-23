@@ -166,6 +166,11 @@ export default function StudentDashboard() {
         .from('exam_assignments')
         .update({ completed: false, score: null })
         .eq('user_id', DEMO_USER_ID)
+      // Restaurar intentos para que pueda volver a iniciar exámenes
+      await supabase
+        .from('user_profiles')
+        .update({ exams_remaining: 3 })
+        .eq('id', DEMO_USER_ID)
     }
 
     await supabase.auth.signOut()
