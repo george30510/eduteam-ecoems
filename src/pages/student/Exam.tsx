@@ -142,6 +142,7 @@ export default function Exam() {
         // Examen 3 reutiliza los mismos reactivos del Examen 2
         const examBankMap: Record<number, number> = {
           3: 2,
+          4: 2,
         }
         const bankNumber = examBankMap[nextExamNumber] ?? nextExamNumber
         
